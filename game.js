@@ -1,5 +1,5 @@
 import { Player } from "./player.js";
-import { createPotion } from "./items.js";
+import { createPotion, createEquipment } from "./items.js";
 import { createEnemy } from "./enemies.js";
 import { saveGame, loadGame, hasSave } from "./save.js";
 
@@ -17,7 +17,9 @@ export class Game {
   }
 
   newGame() {
-    this.player = new Player({ inventory: [createPotion()] });
+    this.player = new Player({
+      inventory: [createPotion()]
+    });
     this.enemy = null;
     this.floor = 1;
     this.log = [];
@@ -62,7 +64,7 @@ export class Game {
             <button class="btn secondary" id="load-game" ${hasSave() ? "" : "disabled"}>Spiel laden</button>
           </div>
         </div>
-        <footer>Test-Build v0.1 · Speicherung im Browser</footer>
+        <footer>Version 0.2 · Ausrüstung und Loot</footer>
       </section>
     `;
 
@@ -72,7 +74,7 @@ export class Game {
 
   showHub(message = "") {
     const p = this.player;
-    const hpPct = this.percent(p.hp, p.maxHp);
+    const hpPct = this.percent(p.hp, p.totalMaxHp);
     const xpPct = this.percent(p.xp, p.xpNext);
 
     this.container.innerHTML = `
@@ -96,7 +98,7 @@ export class Game {
           </div>
 
           <div class="stat">
-            <b>HP ${p.hp} / ${p.maxHp}</b>
+            <b>HP ${p.hp} / ${p.totalMaxHp}</b>
             <span>Lebenspunkte</span>
             <div class="bar"><div class="fill hp" style="width:${hpPct}%"></div></div>
           </div>
@@ -110,8 +112,9 @@ export class Game {
           <div class="actions two" style="margin-top:14px">
             <button class="btn" id="dungeon">Dungeon betreten</button>
             <button class="btn gold" id="inventory">Inventar (${p.inventory.length})</button>
+            <button class="btn secondary" id="equipment">Ausrüstung</button>
             <button class="btn secondary" id="save">Speichern</button>
-            <button class="btn secondary" id="rest" ${p.gold < 10 || p.hp >= p.maxHp ? "disabled" : ""}>Rasten (10 Gold)</button>
+            <button class="btn secondary" id="rest" ${p.gold < 10 || p.hp >= p.totalMaxHp ? "disabled" : ""}>Rasten (10 Gold)</button>
           </div>
         </div>
       </section>
@@ -120,6 +123,7 @@ export class Game {
     document.getElementById("menu").onclick = () => this.showMenu();
     document.getElementById("dungeon").onclick = () => this.startFight();
     document.getElementById("inventory").onclick = () => this.showInventory();
+    document.getElementById("equipment").onclick = () => this.showEquipment();
     document.getElementById("save").onclick = () => this.save();
     document.getElementById("rest").onclick = () => this.rest();
   }
@@ -142,7 +146,7 @@ export class Game {
             <h2>Kampf</h2>
             <div class="muted tiny">Etage ${this.floor}</div>
           </div>
-          <div class="tiny">Deine HP: ${p.hp}/${p.maxHp}</div>
+          <div class="tiny">Deine HP: ${p.hp}/${p.totalMaxHp}</div>
         </div>
 
         <div class="panel">
@@ -192,7 +196,7 @@ export class Game {
     this.log.push(`${e.name} verursacht ${enemyHit} Schaden.`);
 
     if (p.hp <= 0) {
-      p.hp = Math.max(1, Math.round(p.maxHp * 0.4));
+      p.hp = Math.max(1, Math.round(p.totalMaxHp * 0.4));
       p.gold = Math.max(0, p.gold - Math.round(p.gold * 0.15));
       this.floor = 1;
       this.enemy = null;
@@ -212,7 +216,12 @@ export class Game {
 
     let message = `${e.name} besiegt: +${e.gold} Gold, +${e.xp} XP.`;
 
-    if (Math.random() < 0.32) {
+    const lootRoll = Math.random();
+    if (lootRoll < 0.42) {
+      const item = createEquipment(this.floor);
+      p.inventory.push(item);
+      message += ` Du findest: ${item.rarityLabel} – ${item.name}.`;
+    } else if (lootRoll < 0.7) {
       p.inventory.push(createPotion());
       message += " Du findest einen Heiltrank.";
     }
@@ -231,7 +240,7 @@ export class Game {
     if (index < 0) return;
 
     const [item] = this.player.inventory.splice(index, 1);
-    const healed = Math.min(item.heal, this.player.maxHp - this.player.hp);
+    const healed = Math.min(item.heal, this.player.totalMaxHp - this.player.hp);
     this.player.hp += healed;
     this.log.push(`Du trinkst einen Heiltrank und erhältst ${healed} HP.`);
     this.showFight();
@@ -252,15 +261,7 @@ export class Game {
 
         <div class="panel">
           <div class="inventory">
-            ${p.inventory.length ? p.inventory.map((item, index) => `
-              <div class="item">
-                <div>
-                  <b>${this.escape(item.name)}</b>
-                  <div class="muted tiny">Heilt ${item.heal} HP</div>
-                </div>
-                <button class="btn gold" data-use="${index}" ${p.hp >= p.maxHp ? "disabled" : ""}>Benutzen</button>
-              </div>
-            `).join("") : `<p class="muted">Dein Inventar ist leer.</p>`}
+            ${p.inventory.length ? p.inventory.map((item, index) => this.renderInventoryItem(item, index)).join("") : `<p class="muted">Dein Inventar ist leer.</p>`}
           </div>
         </div>
       </section>
@@ -269,23 +270,112 @@ export class Game {
     document.getElementById("back").onclick = () => this.showHub();
 
     document.querySelectorAll("[data-use]").forEach(button => {
-      button.onclick = () => {
-        const index = Number(button.dataset.use);
-        const item = p.inventory[index];
-        if (!item || p.hp >= p.maxHp) return;
+      button.onclick = () => this.useInventoryItem(Number(button.dataset.use));
+    });
 
-        p.hp += Math.min(item.heal, p.maxHp - p.hp);
-        p.inventory.splice(index, 1);
-        this.showInventory();
-      };
+    document.querySelectorAll("[data-equip]").forEach(button => {
+      button.onclick = () => this.equipInventoryItem(Number(button.dataset.equip));
     });
   }
 
+  renderInventoryItem(item, index) {
+    if (item.type === "potion") {
+      return `
+        <div class="item">
+          <div>
+            <div class="item-name">${this.escape(item.name)}</div>
+            <div class="muted tiny">Heilt ${item.heal} HP</div>
+          </div>
+          <button class="btn gold" data-use="${index}" ${this.player.hp >= this.player.totalMaxHp ? "disabled" : ""}>Benutzen</button>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="item">
+        <div>
+          <div class="item-name rarity-${item.rarity}">${this.escape(item.rarityLabel)} – ${this.escape(item.name)}</div>
+          <div class="muted tiny">${this.itemStats(item)}</div>
+        </div>
+        <button class="btn" data-equip="${index}">Ausrüsten</button>
+      </div>
+    `;
+  }
+
+  useInventoryItem(index) {
+    const item = this.player.inventory[index];
+    if (!item || item.type !== "potion") return;
+
+    this.player.hp += Math.min(item.heal, this.player.totalMaxHp - this.player.hp);
+    this.player.inventory.splice(index, 1);
+    this.showInventory();
+  }
+
+  equipInventoryItem(index) {
+    const item = this.player.inventory[index];
+    if (!item || item.type !== "equipment") return;
+
+    this.player.inventory.splice(index, 1);
+    this.player.equip(item);
+    this.showInventory();
+  }
+
+  showEquipment() {
+    const p = this.player;
+    const labels = {
+      weapon: "Waffe",
+      armor: "Rüstung",
+      accessory: "Schmuck"
+    };
+
+    this.container.innerHTML = `
+      <section class="screen">
+        <div class="topbar">
+          <div>
+            <h2>Ausrüstung</h2>
+            <div class="muted tiny">Aktive Werteboni</div>
+          </div>
+          <button class="btn secondary" id="back">Zurück</button>
+        </div>
+
+        <div class="panel">
+          <div class="equipment-grid">
+            ${Object.entries(labels).map(([slot, label]) => this.renderEquipmentSlot(slot, label, p.equipment[slot])).join("")}
+          </div>
+        </div>
+      </section>
+    `;
+
+    document.getElementById("back").onclick = () => this.showHub();
+  }
+
+  renderEquipmentSlot(slot, label, item) {
+    return `
+      <div class="equipment-slot">
+        <div>
+          <div class="muted tiny">${label}</div>
+          ${item ? `
+            <div class="item-name rarity-${item.rarity}">${this.escape(item.name)}</div>
+            <div class="muted tiny">${this.itemStats(item)}</div>
+          ` : `<div class="muted">Leer</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  itemStats(item) {
+    const parts = [];
+    if (item.attack) parts.push(`+${item.attack} Angriff`);
+    if (item.defense) parts.push(`+${item.defense} Verteidigung`);
+    if (item.hp) parts.push(`+${item.hp} HP`);
+    return parts.join(" · ") || "Keine Boni";
+  }
+
   rest() {
-    if (this.player.gold < 10 || this.player.hp >= this.player.maxHp) return;
+    if (this.player.gold < 10 || this.player.hp >= this.player.totalMaxHp) return;
 
     this.player.gold -= 10;
-    this.player.hp = this.player.maxHp;
+    this.player.hp = this.player.totalMaxHp;
     this.showHub("Du hast dich vollständig erholt.");
   }
 

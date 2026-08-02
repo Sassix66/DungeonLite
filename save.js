@@ -1,4 +1,4 @@
-const SAVE_KEY = "dungeonlite.save.v01";
+const SAVE_KEY = "dungeonlite.save.v02";
 
 export function saveGame(data) {
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
