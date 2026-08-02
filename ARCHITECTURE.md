@@ -67,3 +67,40 @@ Zentrale Lade- und Cache-Schicht für Bilder und JSON-Daten.
 
 Der DOM-Renderer bleibt vorerst als Rückfalloption erhalten. Der aktive
 Renderer kann im F2-Debug-Menü gewechselt werden.
+
+
+## Visuelle Systeme 3.0.3
+
+### `animation/AnimationController.js`
+Verwaltet zeitlich begrenzte Zustände für Kacheln.
+
+### `particles/ParticleSystem.js`
+Ein gemeinsames Partikelsystem für alle lokalen Effekte.
+
+### `particles/DamageNumberSystem.js`
+Zeichnet schwebende Schadenszahlen und Fehlschläge auf Canvas.
+
+### `lighting/LightingSystem.js`
+Legt eine dunkle Umgebungsmaske über den Raum und schneidet Lichtquellen aus.
+
+### Canvas-Eingabe
+`RenderEngine` führt Hit-Tests gegen die gezeichneten Kachelrechtecke aus und
+ruft anschließend dieselbe `actOnTile()`-Spiellogik wie der DOM-Renderer auf.
+
+
+## Canvas-only Renderer 3.0.4
+
+Der DOM-Dungeonrenderer ist nicht mehr Teil der sichtbaren Spielfläche.
+`CanvasRenderer` übernimmt:
+
+- Kacheldarstellung
+- Hover-Erkennung
+- Klick- und Touch-Hit-Tests
+- Abstiegskachel
+- Pixel-Platzhalter
+- Dekoration
+- Partikel
+- Schadenszahlen
+- Beleuchtung
+
+Das restliche HUD bleibt bewusst DOM-basiert.

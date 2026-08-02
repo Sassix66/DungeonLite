@@ -360,3 +360,24 @@ wie in Version 2.5.
 - Mit `F2` kann im Debug-Menü zwischen DOM und Canvas gewechselt werden.
 - Der aktive Renderer wird dauerhaft gespeichert.
 - Das Debug-Menü zeigt FPS, Framezeit, Draw Calls, Canvas-Größe und Raumvorlage.
+
+
+## Canvas-Interaktion und Effekte in v3.0.3
+
+- Canvas-Kacheln lassen sich mit Maus und Touch bedienen.
+- Angriffe, Fehlschläge, Erkundung und Objektzerstörung besitzen
+  Canvas-Animationen.
+- Partikel und Schadenszahlen werden ohne zusätzliche DOM-Elemente gerendert.
+- Lichtquellen hellen ihre direkte Umgebung dynamisch auf.
+- Das einfache Kampfsystem und alle bestehenden Spielregeln bleiben unverändert.
+
+
+## Canvas-only in v3.0.4
+
+Der Dungeon wird jetzt ausschließlich über Canvas dargestellt. HUD, Inventar,
+Karte und Menüs bleiben weiterhin HTML, damit sie gut lesbar und bedienbar
+bleiben.
+
+Die bisherigen Emoji-Platzhalter im Dungeon wurden durch einfache,
+einheitliche Pixel-Platzhalter ersetzt. Diese dienen als Grundlage für die
+späteren finalen Sprites.

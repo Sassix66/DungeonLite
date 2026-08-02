@@ -7,9 +7,10 @@ export class RenderEngine {
     this.canvas = options.canvas;
     this.assetManager = new AssetManager();
     this.renderer = new CanvasRenderer({
-      canvas: this.canvas
+      canvas: this.canvas,
+      getGameState: () => this.game.state
     });
-    this.mode = options.mode || "dom";
+    this.mode = "canvas";
     this.running = false;
     this.lastTime = performance.now();
     this.fps = 0;
@@ -18,6 +19,9 @@ export class RenderEngine {
     this.fpsAccumulator = 0;
     this.resizeObserver = null;
     this.boundLoop = this.loop.bind(this);
+    this.boundPointer = this.handlePointer.bind(this);
+    this.boundPointerMove = this.handlePointerMove.bind(this);
+    this.boundPointerLeave = this.handlePointerLeave.bind(this);
   }
 
   start() {
@@ -25,6 +29,18 @@ export class RenderEngine {
 
     this.running = true;
     this.observeSize();
+    this.canvas.addEventListener(
+      "pointerup",
+      this.boundPointer
+    );
+    this.canvas.addEventListener(
+      "pointermove",
+      this.boundPointerMove
+    );
+    this.canvas.addEventListener(
+      "pointerleave",
+      this.boundPointerLeave
+    );
     requestAnimationFrame(this.boundLoop);
   }
 
@@ -32,15 +48,28 @@ export class RenderEngine {
     this.running = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.canvas.removeEventListener(
+      "pointerup",
+      this.boundPointer
+    );
+    this.canvas.removeEventListener(
+      "pointermove",
+      this.boundPointerMove
+    );
+    this.canvas.removeEventListener(
+      "pointerleave",
+      this.boundPointerLeave
+    );
   }
 
-  setMode(mode) {
-    this.mode = mode === "canvas" ? "canvas" : "dom";
+  setMode() {
+    this.mode = "canvas";
     this.syncVisibility();
   }
 
   toggleMode() {
-    this.setMode(this.mode === "canvas" ? "dom" : "canvas");
+    this.mode = "canvas";
+    this.syncVisibility();
     return this.mode;
   }
 
@@ -61,19 +90,46 @@ export class RenderEngine {
   }
 
   syncVisibility() {
-    const board = document.querySelector(".dungeon-board");
+    this.canvas.classList.add("active");
+  }
 
-    if (board) {
-      board.classList.toggle(
-        "renderer-hidden",
-        this.mode === "canvas"
-      );
+  handlePointer(event) {
+    const hit = this.renderer.hitTest(
+      event.clientX,
+      event.clientY
+    );
+
+    if (!hit) return;
+
+    event.preventDefault();
+
+    if (hit.type === "exit") {
+      this.game.descendFloor();
+      return;
     }
 
-    this.canvas.classList.toggle(
-      "active",
-      this.mode === "canvas"
+    if (hit.type === "tile") {
+      this.game.actOnTile(hit.tileId);
+    }
+  }
+
+  handlePointerMove(event) {
+    const hit = this.renderer.hitTest(
+      event.clientX,
+      event.clientY
     );
+
+    this.renderer.setHoveredHit(hit);
+    this.canvas.style.cursor = hit ? "pointer" : "default";
+  }
+
+  handlePointerLeave() {
+    this.renderer.setHoveredHit(null);
+    this.canvas.style.cursor = "default";
+  }
+
+  triggerTileEffect(tile, type, text = "") {
+    this.renderer.triggerTileEffect(tile, type, text);
   }
 
   loop(now) {

@@ -33,7 +33,10 @@ export class DebugPanel {
         frameTime: 0,
         drawCalls: 0,
         width: 0,
-        height: 0
+        height: 0,
+        particles: 0,
+        damageNumbers: 0,
+        animations: 0
       };
 
     panel.innerHTML = `
@@ -93,6 +96,21 @@ export class DebugPanel {
       </div>
 
       <div class="debug-row">
+        <span>Partikel</span>
+        <strong>${renderStats.particles || 0}</strong>
+      </div>
+
+      <div class="debug-row">
+        <span>Schadenszahlen</span>
+        <strong>${renderStats.damageNumbers || 0}</strong>
+      </div>
+
+      <div class="debug-row">
+        <span>Animationen</span>
+        <strong>${renderStats.animations || 0}</strong>
+      </div>
+
+      <div class="debug-row">
         <span>Vorlage</span>
         <code>${this.game.currentRoom?.templateId || "unknown"}</code>
       </div>
@@ -102,9 +120,7 @@ export class DebugPanel {
         <button id="debugXp">+100 XP</button>
         <button id="debugNextFloor">Nächste Etage</button>
         <button id="debugReroll">Raum neu würfeln</button>
-        <button id="debugRenderer">
-          Renderer wechseln
-        </button>
+
       </div>
     `;
 

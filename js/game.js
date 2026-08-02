@@ -18,7 +18,7 @@ import {
   getZoneBalance
 } from "./config/balance.js";
 
-const SAVE_KEY = "dungeonlite.v302";
+const SAVE_KEY = "dungeonlite.v304";
 const ACTION_AP_COST = GLOBAL_BALANCE.actionApCost;
 const ENEMY_REGEN_DELAY = GLOBAL_BALANCE.enemyRegenDelayMs;
 const ENEMY_REGEN_PER_SECOND = GLOBAL_BALANCE.enemyRegenPerSecond;
@@ -1060,7 +1060,7 @@ export class Game {
     this.renderEngine = new RenderEngine({
       game: this,
       canvas,
-      mode: localStorage.getItem("dungeonlite.renderer") || "dom"
+      mode: "canvas"
     });
 
     this.renderEngine.start();
@@ -1071,10 +1071,7 @@ export class Game {
     const biome = this.currentBiome();
     document.documentElement.style.setProperty("--biome-accent", biome.accent);
 
-    const previousRendererMode =
-      this.renderEngine?.mode ||
-      localStorage.getItem("dungeonlite.renderer") ||
-      "dom";
+    const previousRendererMode = "canvas";
 
     this.root.innerHTML = `
       <div class="game-shell biome-${biome.id}">
@@ -1099,7 +1096,7 @@ export class Game {
     this.initializeRenderEngine();
 
     if (this.renderEngine) {
-      this.renderEngine.setMode(previousRendererMode);
+      this.renderEngine.setMode("canvas");
     }
   }
 
@@ -1224,16 +1221,12 @@ export class Game {
             <strong>BESIEGT</strong>
             <span>Alle Gegner wurden geheilt. Warte auf vollständige Genesung.</span>
           </div>` : ""}
-        <div class="board-wrap">
-          <canvas id="dungeonCanvas" class="dungeon-canvas"></canvas>
-          <div class="dungeon-board room-template-${this.currentRoom.type}">
-            ${this.renderRoomDecorations()}
-            ${this.currentTiles
-              .filter(tile => !tile.hiddenByCapacity)
-              .map(tile => this.renderTile(tile))
-              .join("")}
-            ${this.renderExitTile()}
-          </div>
+        <div class="board-wrap canvas-only-board">
+          <canvas
+            id="dungeonCanvas"
+            class="dungeon-canvas active"
+            aria-label="Interaktiver Dungeonraum">
+          </canvas>
         </div>
       </section>
     `;
@@ -1924,6 +1917,30 @@ export class Game {
   }
 
   playTileActionEffect(tile, type, text = "") {
+    const canvasType = {
+      "enemy-hit": "enemy",
+      "critical": "critical",
+      "miss": "miss",
+      "vase-hit": "vase",
+      "vase-break": "destroy",
+      "object-hit": "object",
+      "object-break": "destroy",
+      "explore": "explore",
+      "trap": "object",
+      "treasure": "treasure",
+      "shrine": "shrine",
+      "fountain": "fountain",
+      "enemy-defeat": "destroy",
+      "boss-defeat": "destroy",
+      "complete": "destroy"
+    }[type] || type;
+
+    this.renderEngine?.triggerTileEffect(
+      tile,
+      canvasType,
+      text
+    );
+
     this.tileEffect = {
       tileId: tile.id,
       type,
@@ -2264,12 +2281,7 @@ export class Game {
   }
 
   renderExitTile() {
-    if (!this.state.dungeon.exitUnlocked) return "";
-    return `<button class="tile stairs" style="grid-column:7 / span 2;grid-row:7 / span 2" id="stairsBtn">
-      <span class="tile-title">ABSTIEG</span>
-      <span class="tile-sub">Zur nächsten Etage</span>
-      <span class="tile-icon">🪜</span>
-    </button>`;
+    return "";
   }
 
   openOverlay(type) {

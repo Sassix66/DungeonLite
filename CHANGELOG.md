@@ -27,3 +27,52 @@
 - Balance
 - Speicherstände
 - Dungeonlogik
+
+
+## v3.0.3
+
+### Neu
+- Canvas-Kacheln sind anklickbar und auf Touchgeräten bedienbar.
+- AnimationController für `idle`, `hit`, `destroy`, `open` und `explore`.
+- Generisches Partikelsystem für:
+  - Blut
+  - Scherben
+  - Staub
+  - Gold
+  - Wasser
+  - Licht
+  - Fehlschläge
+- Canvas-Schadenszahlen und `MISS`-Anzeige.
+- Einfache dynamische Beleuchtung für Fackeln, Kristalle, Lava, Brunnen,
+  Heiligtümer und Bosse.
+- Debug-Anzeige für aktive Partikel, Schadenszahlen und Animationen.
+
+### Behoben
+- Der Canvas-Renderer blockiert die Bedienung des Dungeons nicht mehr.
+
+
+## v3.0.4
+
+### Neu
+- Canvas ist jetzt der einzige Dungeon-Renderer.
+- Der alte HTML-Kachelrenderer wurde aus der sichtbaren Dungeonansicht entfernt.
+- Hover- und Touch-Hit-Tests laufen vollständig über Canvas.
+- Der Abstieg wird als anklickbare Canvas-Kachel gerendert.
+- Erste einheitliche Pixel-Platzhalter ersetzen Emojis im Dungeon:
+  - Gegner
+  - Bosse
+  - Vasen
+  - Kisten
+  - Truhen
+  - Brunnen
+  - Heiligtümer
+  - Händler
+  - Fallen
+  - Erkundung
+  - Dekoration
+- Hover-Rahmen markieren die aktuell auswählbare Kachel.
+- Canvas-Dekoration wird nun geometrisch statt als Emoji gezeichnet.
+
+### Entfernt
+- Umschaltung auf den alten DOM-Dungeonrenderer.
+- Sichtbare HTML-Kacheln im Dungeonbereich.
