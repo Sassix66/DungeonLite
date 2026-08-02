@@ -1,4 +1,4 @@
-# DungeonLite v1.1
+# DungeonLite v1.2
 
 ## Neue Etagenkarte
 
@@ -58,3 +58,19 @@ Kein AP verbrauchen:
 - Spätere Etagen können mehr Räume enthalten.
 - Spätere Räume können mehr Aktionskacheln enthalten.
 - Elite- und Bossräume werden erst schrittweise häufiger.
+
+
+## Inventar und Schatztruhen in v1.2
+
+- Inventargegenstände sind kompakter und passen sich der verfügbaren Breite an.
+- Lange Gegenstandsnamen werden gekürzt dargestellt und verursachen kein horizontales Überlaufen.
+- Heiltränke können über den neuen Button `BENUTZEN` verwendet werden.
+- Ausrüstung kann weiterhin ausgerüstet und verkauft werden.
+- Schatztruhen benötigen immer einen silbernen Schlüssel.
+- Beim Öffnen wird genau ein silberner Schlüssel verbraucht.
+- Schatztruhen können enthalten:
+  - zufällige Ausrüstung
+  - Gold
+  - Heiltränke
+- Ausrüstung aus Schatztruhen skaliert mit der aktuellen Etage und kann gewöhnlich, selten oder episch sein.
+- Silberne Schlüssel können von Gegnern, Elitegegnern, Bossen sowie aus Vasen und Kisten stammen.

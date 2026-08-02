@@ -1,7 +1,7 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 import { AudioManager } from "./audio.js";
 
-const SAVE_KEY = "dungeonlite.v11";
+const SAVE_KEY = "dungeonlite.v12";
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
 const PLAYER_REGEN_DELAY = 5000;
@@ -237,6 +237,7 @@ export class Game {
         discovered: type !== "explore",
         completed: false,
         used: false,
+        locked: type === "treasure",
         lastHitAt: 0
       };
 
@@ -697,6 +698,7 @@ export class Game {
             <div class="item-info">
               ${selected ? `
                 <h3>${this.escape(selected.name)}</h3>
+                ${selected.rarityLabel ? `<p>${this.escape(selected.rarityLabel)}</p>` : ""}
                 ${selected.attack ? `<p>ANGRIFF +${selected.attack}</p>` : ""}
                 ${selected.defense ? `<p>VERTEIDIGUNG +${selected.defense}</p>` : ""}
                 ${selected.hp ? `<p>HP +${selected.hp}</p>` : ""}
@@ -715,11 +717,26 @@ export class Game {
           </div>
         </div>
 
-        <div class="bottom-actions">
-          <button type="button" class="action-btn primary" id="equipBtn" ${this.player.defeated || !selected || !selected.slot ? "disabled" : ""}>
+        <div class="bottom-actions inventory-actions">
+          <button
+            type="button"
+            class="action-btn use"
+            id="useBtn"
+            ${this.player.defeated || !selected || selected.type !== "potion" ? "disabled" : ""}>
+            BENUTZEN
+          </button>
+          <button
+            type="button"
+            class="action-btn primary"
+            id="equipBtn"
+            ${this.player.defeated || !selected || !selected.slot ? "disabled" : ""}>
             AUSRÜSTEN
           </button>
-          <button type="button" class="action-btn sell" id="sellBtn" ${this.player.defeated || !selected ? "disabled" : ""}>
+          <button
+            type="button"
+            class="action-btn sell"
+            id="sellBtn"
+            ${this.player.defeated || !selected ? "disabled" : ""}>
             VERKAUFEN
           </button>
         </div>
@@ -789,7 +806,7 @@ export class Game {
 
     const info = {
       shrine: ["HEILIGTUM", "HP regenerieren", "🏛️"],
-      treasure: ["SCHATZTRUHE", "Öffnen", "🧰"],
+      treasure: ["SCHATZTRUHE", tile.locked ? "Benötigt 1 silbernen Schlüssel" : "Geöffnet", "🧰"],
       trap: ["FALLE", "Optional · Gefährlich", "⚠️"],
       fountain: ["BRUNNEN", "HP und AP auffüllen", "⛲"],
       merchant: ["HÄNDLER", "Spezialraum", "🛒"],
@@ -849,6 +866,7 @@ export class Game {
       });
     });
 
+    document.getElementById("useBtn")?.addEventListener("click", () => this.useSelectedItem());
     document.getElementById("equipBtn")?.addEventListener("click", () => this.equipSelected());
     document.getElementById("sellBtn")?.addEventListener("click", () => this.sellSelected());
     document.getElementById("meditationBtn")?.addEventListener("click", () => this.toggleMeditation());
@@ -884,10 +902,30 @@ export class Game {
     }
 
     if (tile.type === "treasure") {
+      if (this.state.silverKeys <= 0) {
+        this.audio.play("error");
+        this.state.message =
+          "Die Schatztruhe ist verschlossen. Du benötigst einen silbernen Schlüssel.";
+        this.render();
+        return;
+      }
+
+      this.state.silverKeys -= 1;
+      tile.locked = false;
       this.audio.play("treasure");
 
-      if (Math.random() < 0.5) {
-        const gold = 10 + Math.floor(Math.random() * (18 + this.state.floor * 3));
+      const roll = Math.random();
+
+      if (roll < 0.48) {
+        const equipment = this.createEquipmentReward();
+        this.player.inventory.push(equipment);
+        this.finishTile(
+          tile,
+          `Schatztruhe geöffnet: ${equipment.name} gefunden.`
+        );
+      } else if (roll < 0.76) {
+        const gold =
+          12 + Math.floor(Math.random() * (24 + this.state.floor * 4));
         this.state.gold += gold;
         this.audio.play("gold");
         this.finishTile(tile, `Schatztruhe geöffnet: ${gold} Gold.`);
@@ -946,6 +984,7 @@ export class Game {
 
       tile.discovered = true;
       tile.type = outcomes[Math.floor(Math.random() * outcomes.length)];
+      tile.locked = tile.type === "treasure";
 
       if (tile.type === "enemy") tile.enemy = this.makeEnemy(false);
 
@@ -1003,7 +1042,16 @@ export class Game {
       this.audio.play(tile.type === "boss" ? "bossDefeat" : "enemyDefeat");
       this.state.gold += enemy.reward;
       this.gainXp(enemy.xp);
-      this.finishTile(tile, `${enemy.name} besiegt. +${enemy.reward} Gold.`);
+
+      let rewardText = `${enemy.name} besiegt. +${enemy.reward} Gold.`;
+
+      const keyChance = tile.type === "boss" ? 0.75 : enemy.elite ? 0.35 : 0.14;
+      if (Math.random() < keyChance) {
+        this.state.silverKeys += 1;
+        rewardText += " Silberner Schlüssel gefunden.";
+      }
+
+      this.finishTile(tile, rewardText);
       return;
     }
 
@@ -1019,15 +1067,29 @@ export class Game {
     this.state.message = `${tile.object.name}: -${damage} Haltbarkeit.`;
 
     if (tile.object.hp <= 0) {
-      if (Math.random() < 0.45) {
+      const roll = Math.random();
+
+      if (roll < 0.18) {
+        this.state.silverKeys += 1;
+        this.finishTile(
+          tile,
+          `${tile.object.name} zerstört: Silberner Schlüssel gefunden.`
+        );
+      } else if (roll < 0.52) {
         this.player.inventory.push(structuredClone(ITEMS[4]));
         this.audio.play("potion");
-        this.finishTile(tile, `${tile.object.name} zerstört: Heiltrank gefunden.`);
+        this.finishTile(
+          tile,
+          `${tile.object.name} zerstört: Heiltrank gefunden.`
+        );
       } else {
         const gold = 8 + Math.floor(Math.random() * 18);
         this.state.gold += gold;
         this.audio.play("gold");
-        this.finishTile(tile, `${tile.object.name} zerstört: ${gold} Gold gefunden.`);
+        this.finishTile(
+          tile,
+          `${tile.object.name} zerstört: ${gold} Gold gefunden.`
+        );
       }
       return;
     }
@@ -1321,6 +1383,70 @@ export class Game {
     }
   }
 
+  createEquipmentReward() {
+    const equipmentPool = ITEMS.filter(item => item.slot);
+    const base = structuredClone(
+      equipmentPool[Math.floor(Math.random() * equipmentPool.length)]
+    );
+
+    const floorScale = 1 + Math.max(0, this.state.floor - 1) * 0.12;
+    const rarityRoll = Math.random();
+
+    let rarity = "common";
+    let rarityLabel = "Gewöhnlich";
+    let multiplier = 1;
+
+    if (rarityRoll < 0.06) {
+      rarity = "epic";
+      rarityLabel = "Episch";
+      multiplier = 2.05;
+    } else if (rarityRoll < 0.24) {
+      rarity = "rare";
+      rarityLabel = "Selten";
+      multiplier = 1.5;
+    }
+
+    base.rarity = rarity;
+    base.rarityLabel = rarityLabel;
+    base.attack = Math.round((base.attack || 0) * floorScale * multiplier);
+    base.defense = Math.round((base.defense || 0) * floorScale * multiplier);
+    base.hp = Math.round((base.hp || 0) * floorScale * multiplier);
+    base.value = Math.round((base.value || 10) * floorScale * multiplier);
+    base.name = `${rarityLabel} · ${base.name}`;
+
+    return base;
+  }
+
+  useSelectedItem() {
+    if (!this.canAct()) return;
+
+    const item = this.player.inventory[this.selectedItem];
+    if (!item || item.type !== "potion") return;
+
+    if (this.player.hp >= this.player.maxHp) {
+      this.state.message = "Deine HP sind bereits vollständig gefüllt.";
+      this.audio.play("error");
+      this.render();
+      return;
+    }
+
+    const healed = Math.min(
+      item.heal || 0,
+      this.player.maxHp - this.player.hp
+    );
+
+    this.player.hp += healed;
+    this.player.inventory.splice(this.selectedItem, 1);
+    this.selectedItem = Math.max(
+      0,
+      Math.min(this.selectedItem, this.player.inventory.length - 1)
+    );
+
+    this.audio.play("potion");
+    this.state.message = `${item.name} benutzt: +${healed} HP.`;
+    this.render();
+  }
+
   equipSelected() {
     if (!this.canAct()) return;
 
@@ -1493,7 +1619,7 @@ export class Game {
 
   reset() {
     const keys = [
-      "dungeonlite.v102", "dungeonlite.v11", "dungeonlite.v107", "dungeonlite.v106", "dungeonlite.v105", "dungeonlite.v104", "dungeonlite.v103", "dungeonlite.v102", "dungeonlite.v101", "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
+      "dungeonlite.v102", "dungeonlite.v12", "dungeonlite.v11", "dungeonlite.v107", "dungeonlite.v106", "dungeonlite.v105", "dungeonlite.v104", "dungeonlite.v103", "dungeonlite.v102", "dungeonlite.v101", "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
       "dungeonlite.v07", "dungeonlite.v06", "dungeonlite.v054",
       "dungeonlite.v053", "dungeonlite.v052", "dungeonlite.v05"
     ];

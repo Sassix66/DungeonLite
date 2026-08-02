@@ -1071,3 +1071,66 @@ button.map-room:disabled {
 .tile.merchant {
   background: #81623d;
 }
+
+
+.inventory-pane {
+  overflow: hidden;
+}
+
+.item-detail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.item-info {
+  min-width: 0;
+}
+
+.item-grid {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  align-content: start;
+  max-width: 100%;
+}
+
+.item-cell {
+  min-width: 0;
+  min-height: 64px;
+  padding: 5px 4px;
+  overflow: hidden;
+}
+
+.item-cell .big {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.item-cell span:last-child {
+  display: block;
+  overflow: hidden;
+  font-size: .66rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.action-btn.use {
+  background: #3f7e60;
+}
+
+.tile.treasure {
+  border-color: #d6b559;
+}
+
+@media (max-width: 430px) {
+  .item-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inventory-actions {
+    grid-template-columns: 1fr;
+  }
+}
