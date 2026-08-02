@@ -1,28 +1,16 @@
 # DungeonLite
 
-Eigenständiges minimalistisches Browser-RPG mit anklickbaren Dungeonfeldern.
+Version 0.4 setzt die Dungeon-Oberfläche als übersichtliches Drei-Spalten-Layout um:
 
-## Version 0.3
+- Links: Level, Werte, Ressourcen und Minimap
+- Mitte: großes anklickbares Dungeon-Raster
+- Rechts: Ausrüstung, Inventar und Itemdetails
+- Oben: Etappe, Währungen und Systembuttons
 
-- Kachelbasierte Dungeon-Ansicht
-- Felder werden nacheinander freigeschaltet
-- Gegnerfelder
-- Schatzfelder
-- Schreine
-- Blockaden
-- Bossfeld
-- Ausgang zum nächsten Abschnitt
-- Kämpfe
-- Loot und Ausrüstung
-- Inventar
-- Speichern und Laden
-- Responsive Design
-
-## Veröffentlichung
+## Start
 
 GitHub Pages:
+- Branch: main
+- Ordner: / (root)
 
-- Branch: `main`
-- Ordner: `/ (root)`
-
-Alle Dateien und Ordner müssen direkt im Repository-Stamm liegen.
+Alle Dateien müssen direkt im Repository-Stamm liegen.
