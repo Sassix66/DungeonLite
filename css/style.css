@@ -3008,11 +3008,6 @@ body {
   display: block;
 }
 
-.dungeon-board.renderer-hidden {
-  visibility: hidden;
-  pointer-events: none;
-}
-
 .debug-actions {
   grid-template-columns: 1fr 1fr;
 }
@@ -3083,7 +3078,7 @@ body {
 
 
 /* ================================================================
-   DungeonLite v4.0.1 – Stabilisierung
+   DungeonLite v4.0.2 – Stabilisierung
    ================================================================ */
 
 @media (orientation: landscape) and (max-height: 520px) {

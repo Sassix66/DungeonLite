@@ -45,7 +45,7 @@ export class Game {
     this.statisticsSystem.start();
     this.debugPanel = new DebugPanel(this);
     this.renderEngine = null;
-    this.selectedItem = 0;
+    this.selectedItemUid = null;
     this.activeTab = "equipment";
     this.inventoryFilter = "all";
     this.inventorySort = "power-desc";
@@ -179,6 +179,11 @@ export class Game {
     p.equipment ??= {};
     for (const slot of this.equipmentSlots()) {
       p.equipment[slot.id] ??= null;
+    }
+
+    const inventoryUids = new Set();
+    for (const item of p.inventory || []) {
+      this.ensureInventoryItemUid(item, inventoryUids);
     }
 
     this.state.defeatPenalty ??= {
@@ -1107,19 +1112,15 @@ export class Game {
 
     this.renderEngine = new RenderEngine({
       game: this,
-      canvas,
-      mode: "canvas"
+      canvas
     });
 
     this.renderEngine.start();
-    this.renderEngine.syncVisibility();
   }
 
   render() {
     const biome = this.currentBiome();
     document.documentElement.style.setProperty("--biome-accent", biome.accent);
-
-    const previousRendererMode = "canvas";
 
     this.root.innerHTML = `
       <div class="game-shell biome-${biome.id}">
@@ -1142,10 +1143,6 @@ export class Game {
     }
 
     this.initializeRenderEngine();
-
-    if (this.renderEngine) {
-      this.renderEngine.setMode("canvas");
-    }
   }
 
   renderTopbar() {
@@ -1488,7 +1485,11 @@ export class Game {
   }
 
   filteredInventoryEntries() {
-    const entries = this.player.inventory.map((item, index) => ({ item, index }));
+    const entries = this.player.inventory.map((item, index) => ({
+      item,
+      index,
+      uid: this.ensureInventoryItemUid(item)
+    }));
 
     const filtered = entries.filter(({ item }) => {
       if (this.inventoryFilter === "all") return true;
@@ -1551,7 +1552,8 @@ export class Game {
   }
 
   renderRightPanel() {
-    const selected = this.player.inventory[this.selectedItem] || null;
+    const selectedEntry = this.selectedInventoryEntry();
+    const selected = selectedEntry?.item || null;
     const entries = this.filteredInventoryEntries();
 
     return `
@@ -1599,10 +1601,10 @@ export class Game {
           </div>
 
           <div class="item-grid">
-            ${entries.map(({ item, index }) => `
+            ${entries.map(({ item, uid }) => `
               <button class="item-cell rarity-border-${item.rarity || "common"}
-                ${index === this.selectedItem ? "selected" : ""}"
-                data-item="${index}">
+                ${uid === this.selectedItemUid ? "selected" : ""}"
+                data-item-uid="${uid}">
                 <span class="item-level">${item.itemLevel ? `IL ${item.itemLevel}` : ""}</span>
                 <span class="big">${item.icon}</span>
                 <span class="item-cell-name">${this.escape(item.name)}</span>
@@ -1699,9 +1701,9 @@ export class Game {
     document.querySelectorAll("[data-map-room]").forEach(button => {
       button.onclick = () => this.moveToRoom(Number(button.dataset.mapRoom));
     });
-    document.querySelectorAll("[data-item]").forEach(button => {
+    document.querySelectorAll("[data-item-uid]").forEach(button => {
       button.onclick = () => {
-        this.selectedItem = Number(button.dataset.item);
+        this.selectedItemUid = button.dataset.itemUid;
         this.render();
       };
     });
@@ -1710,6 +1712,7 @@ export class Game {
       "change",
       event => {
         this.inventoryFilter = event.target.value;
+        this.selectedItemUid = null;
         this.render();
       }
     );
@@ -1718,6 +1721,7 @@ export class Game {
       "change",
       event => {
         this.inventorySort = event.target.value;
+        this.selectedItemUid = null;
         this.render();
       }
     );
@@ -1767,6 +1771,7 @@ export class Game {
   }
 
   actOnTile(id) {
+    if (this.activeRoomTransition || this.stageTransition) return;
     if (!this.canAct()) return;
     if (this.state.meditation.active) this.state.meditation.active = false;
 
@@ -2268,9 +2273,16 @@ export class Game {
   }
 
   moveToRoom(roomId) {
+    if (this.activeRoomTransition || this.stageTransition) return;
     if (!this.canAct()) return;
+    if (roomId === this.currentRoom.id) return;
+
     const room = this.state.dungeon.rooms.find(room => room.id === roomId);
     if (!room) return;
+
+    const adjacentRoomIds = Object.values(this.currentRoom.neighbors);
+    if (!adjacentRoomIds.includes(roomId)) return;
+
     room.visited = true;
     room.revealed = true;
     this.revealAdjacentRooms(this.state.dungeon.rooms, room.id);
@@ -2301,6 +2313,7 @@ export class Game {
   }
 
   descendFloor() {
+    if (this.activeRoomTransition || this.stageTransition) return;
     if (!this.state.dungeon.exitUnlocked || !this.canAct()) return;
     const next = this.state.floor + 1;
     this.stageTransition = { from: this.state.floor, to: next };
@@ -2448,7 +2461,11 @@ export class Game {
 
     this.state.gold -= item.value;
     if (item.type === "merchant-key") this.state.silverKeys += 1;
-    else this.player.inventory.push(structuredClone(item));
+    else {
+      const purchasedItem = structuredClone(item);
+      purchasedItem.uid = this.createInventoryItemUid();
+      this.player.inventory.push(purchasedItem);
+    }
     this.state.message = `${item.name} gekauft.`;
     this.render();
   }
@@ -2473,7 +2490,7 @@ export class Game {
     this.state.materials.iron += iron;
     this.state.materials.essence += essence;
     this.player.inventory.splice(index, 1);
-    this.selectedItem = 0;
+    this.selectedItemUid = null;
     this.render();
   }
 
@@ -2521,18 +2538,20 @@ export class Game {
   }
 
   useSelectedItem() {
-    const item = this.player.inventory[this.selectedItem];
+    const selected = this.selectedInventoryEntry();
+    const item = selected?.item;
     if (!item || item.type !== "potion") return;
     const healed = Math.min(item.heal, this.player.maxHp - this.player.hp);
     this.player.hp += healed;
-    this.player.inventory.splice(this.selectedItem, 1);
-    this.selectedItem = 0;
+    this.player.inventory.splice(selected.index, 1);
+    this.selectedItemUid = null;
     this.state.message = `${item.name}: +${healed} HP.`;
     this.render();
   }
 
   equipSelected() {
-    const item = this.player.inventory[this.selectedItem];
+    const selected = this.selectedInventoryEntry();
+    const item = selected?.item;
     if (!item?.slot) return;
 
     let slot = item.slot;
@@ -2542,19 +2561,47 @@ export class Game {
 
     const old = this.player.equipment[slot];
     this.player.equipment[slot] = item;
-    this.player.inventory.splice(this.selectedItem, 1);
+    this.player.inventory.splice(selected.index, 1);
     if (old) this.player.inventory.push(old);
-    this.selectedItem = 0;
+    this.selectedItemUid = null;
     this.render();
   }
 
   sellSelected() {
-    const item = this.player.inventory[this.selectedItem];
+    const selected = this.selectedInventoryEntry();
+    const item = selected?.item;
     if (!item) return;
     this.state.gold += item.value || 5;
-    this.player.inventory.splice(this.selectedItem, 1);
-    this.selectedItem = 0;
+    this.player.inventory.splice(selected.index, 1);
+    this.selectedItemUid = null;
     this.render();
+  }
+
+  createInventoryItemUid() {
+    return crypto.randomUUID?.() ||
+      `item-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+  }
+
+  ensureInventoryItemUid(item, usedUids = null) {
+    if (!item.uid || usedUids?.has(item.uid)) {
+      item.uid = this.createInventoryItemUid();
+    }
+
+    usedUids?.add(item.uid);
+
+    return item.uid;
+  }
+
+  selectedInventoryEntry() {
+    if (!this.selectedItemUid) return null;
+
+    const index = this.player.inventory.findIndex(
+      item => this.ensureInventoryItemUid(item) === this.selectedItemUid
+    );
+
+    return index < 0
+      ? null
+      : { item: this.player.inventory[index], index };
   }
 
   spendTalentPoint(stat) {
@@ -2984,10 +3031,14 @@ export class Game {
   }
 
   reset() {
-    localStorage.clear();
+    localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem("dungeonlite.seed");
+    for (const legacyKey of LEGACY_SAVE_KEYS) {
+      localStorage.removeItem(legacyKey);
+    }
     this.context.seed.setSeed(Date.now());
     this.state = this.createState();
-    this.selectedItem = 0;
+    this.selectedItemUid = null;
     this.activeOverlay = null;
     this.render();
   }

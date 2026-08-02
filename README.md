@@ -1,4 +1,4 @@
-# DungeonLite v4.0.1
+# DungeonLite v4.0.4
 
 ## Neue Etagenkarte
 
@@ -402,3 +402,44 @@ späteren finalen Sprites.
 - Das Smartphone-Querformat verwendet wieder drei echte Spalten.
 - Spielstände aus v4.0.0 und den Canvas-Versionen 3.0.x werden migriert.
 - Spielversion und Speicherformat liegen zentral in `js/config/version.js`.
+
+
+## Technische Bereinigung in v4.0.2
+
+- Eine statische Importprüfung kontrolliert lokale Modulpfade und meldet
+  JavaScript-Module, die vom Einstiegspunkt `js/main.js` nicht erreichbar sind.
+- Der Speicherschlüssel wird direkt aus der zentralen Spielversion abgeleitet.
+- Der Spielstand aus v4.0.1 wird beim Laden automatisch übernommen.
+- Wirkungslose Reste der früheren Renderer-Umschaltung wurden entfernt.
+- Die bereits entfernten Altmodule `save.js`, `player.js`, `items.js` und
+  `dungeon.js` bleiben außerhalb des Builds; die Importprüfung bestätigt,
+  dass alle enthaltenen Module Teil des aktiven Modulbaums sind.
+
+Technische Prüfung ausführen:
+
+```text
+node scripts/check-imports.mjs
+node tests/inventory-selection.test.mjs
+```
+
+
+## Fehlerkorrekturen in v4.0.3
+
+- Der freigeschaltete Abstieg wird wieder sichtbar im Canvas gezeichnet und
+  kann angeklickt werden.
+- Canvas-Treffer sind an den Raum gebunden, in dem sie erzeugt wurden. Alte
+  Treffer können nach einem Raumwechsel keine gleich nummerierte Kachel im
+  neuen Raum mehr auslösen.
+- Während Raum- und Etagenübergängen werden weitere Dungeonaktionen ignoriert.
+- Raumwechsel sind nur noch zu einem direkt benachbarten Raum möglich.
+
+
+## Inventarkorrekturen in v4.0.4
+
+- Die Auswahl eines Inventargegenstands verwendet eine stabile Gegenstands-ID
+  statt einer veränderlichen Array-Position.
+- Ausrüstung lässt sich nach Sortieren und Filtern zuverlässig auswählen und
+  ausrüsten.
+- Nach Benutzen, Ausrüsten, Verkaufen oder Zerlegen wird die Auswahl geleert,
+  statt unbemerkt auf den nächsten Gegenstand zu springen.
+- Verbrauchte Heiltränke verschwinden unmittelbar aus der sichtbaren Liste.

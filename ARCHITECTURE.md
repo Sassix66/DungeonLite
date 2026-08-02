@@ -1,4 +1,4 @@
-# DungeonLite 4.0.1 – Architektur
+# DungeonLite 4.0.4 – Architektur
 
 ## Kernmodule
 
@@ -85,7 +85,7 @@ Legt eine dunkle Umgebungsmaske über den Raum und schneidet Lichtquellen aus.
 
 ### Canvas-Eingabe
 `RenderEngine` führt Hit-Tests gegen die gezeichneten Kachelrechtecke aus und
-ruft anschließend dieselbe `actOnTile()`-Spiellogik wie der DOM-Renderer auf.
+ruft anschließend `actOnTile()` als gemeinsame Spiellogik auf.
 
 
 ## Canvas-only Renderer 3.0.4
@@ -105,11 +105,17 @@ Der DOM-Dungeonrenderer ist nicht mehr Teil der sichtbaren Spielfläche.
 
 Das restliche HUD bleibt bewusst DOM-basiert.
 
+Canvas-Trefferregionen tragen die ID ihres Ursprungsraums. Die RenderEngine
+verwirft einen Treffer, wenn inzwischen ein anderer Raum aktiv ist. Der
+Abstieg wird nach der Freischaltung als eigene, raumgebundene Trefferregion
+auf dem Canvas aufgebaut.
 
-## Version und Persistenz 4.0.1
 
-`config/version.js` enthält die zentrale Spielversion, den aktuellen
-Speicherschlüssel und die unterstützten Legacy-Schlüssel. Beim Laden wird
+## Version und Persistenz 4.0.2
+
+`config/version.js` enthält die zentrale Spielversion und die unterstützten
+Legacy-Schlüssel. Der aktuelle Speicherschlüssel wird aus der Spielversion
+abgeleitet. Beim Laden wird
 der erste gültige ältere Spielstand automatisch auf den aktuellen Schlüssel
 kopiert.
 
@@ -118,3 +124,17 @@ kopiert.
 Der F2-Listener wird einmalig beim Spielstart registriert. Normale
 UI-Handler werden nach einem DOM-Render weiterhin an die neu erzeugten
 Elemente gebunden.
+
+## Statische Importprüfung
+
+`scripts/check-imports.mjs` verfolgt alle lokalen ES-Modul-Imports ab
+`js/main.js`. Die Prüfung schlägt bei fehlenden Importzielen und bei
+nicht erreichbaren JavaScript-Modulen fehl. Damit bleiben versehentlich
+wieder eingeführte Altmodule und unvollständige Modulverschiebungen sichtbar.
+
+## Inventarauswahl
+
+Inventargegenstände erhalten eine stabile `uid`. Die aktuelle UI-Auswahl wird
+über diese ID aufgelöst und nicht über eine Array-Position. Dadurch bleibt die
+Zuordnung bei Sortierung stabil; nach einer Mutation wird die Auswahl bewusst
+geleert.

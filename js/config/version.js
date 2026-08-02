@@ -1,8 +1,11 @@
-export const GAME_VERSION = "4.0.1";
+export const GAME_VERSION = "4.0.4";
 
-export const SAVE_KEY = "dungeonlite.v401";
+export const SAVE_KEY = `dungeonlite.v${GAME_VERSION.replaceAll(".", "")}`;
 
 export const LEGACY_SAVE_KEYS = Object.freeze([
+  "dungeonlite.v403",
+  "dungeonlite.v402",
+  "dungeonlite.v401",
   "dungeonlite.v400",
   "dungeonlite.v304",
   "dungeonlite.v303",

@@ -83,6 +83,7 @@ export class CanvasRenderer {
     this.buildWalls(room, frameState);
     this.buildDecorations(room, frameState);
     this.buildTiles(room, frameState);
+    this.buildExit(room, frameState);
     this.particles.update(frameState.deltaTime || 16);
     this.damageNumbers.update(frameState.deltaTime || 16);
 
@@ -279,6 +280,7 @@ export class CanvasRenderer {
       const rect = this.cellRect(tile.grid);
       this.hitRegions.push({
         type: "tile",
+        roomId: room.id,
         tileId: tile.id,
         rect
       });
@@ -741,6 +743,7 @@ export class CanvasRenderer {
 
     this.hitRegions.push({
       type: "exit",
+      roomId: room.id,
       rect
     });
 

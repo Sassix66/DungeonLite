@@ -1,5 +1,59 @@
 # Changelog
 
+## v4.0.4 (Hotfix: reset())
+
+### Behoben
+- `reset()` löschte über `localStorage.clear()` den gesamten localStorage der
+  Domain statt nur der DungeonLite-eigenen Speicherstände. Jetzt werden
+  gezielt nur `SAVE_KEY`, alle `LEGACY_SAVE_KEYS` sowie `dungeonlite.seed`
+  entfernt.
+
+## v4.0.4
+
+### Behoben
+- Ausrüstung konnte durch eine veraltete numerische Inventarposition falsch
+  oder gar nicht ausgewählt werden.
+- Sortieren und Filtern konnten Auswahl und dargestellten Gegenstand
+  auseinanderlaufen lassen.
+- Nach dem Benutzen eines Heiltranks sprang die Auswahl automatisch auf den
+  nächsten Inventargegenstand, wodurch der Verbrauch verzögert wirkte.
+
+### Technisch
+- Inventarauswahl auf stabile Gegenstands-IDs umgestellt.
+- Vorhandene Spielstände erhalten fehlende IDs beim Laden automatisch.
+- Automatisierter Test für Ausrüsten und den Verbrauch identischer Heiltränke
+  ergänzt.
+
+## v4.0.3
+
+### Behoben
+- Der freigeschaltete Etagenabstieg fehlte im Canvas-Aufbau und war dadurch
+  weder sichtbar noch anklickbar.
+- Veraltete Canvas-Treffer konnten nach einem Raumwechsel auf eine gleich
+  nummerierte Kachel des neuen Raums angewendet werden.
+- Zusätzliche Eingaben während eines laufenden Raum- oder Etagenübergangs
+  konnten unerwartete Aktionen auslösen.
+- Die Karte erlaubte Wechsel zu bereits sichtbaren, aber nicht direkt
+  benachbarten Räumen.
+
+### Unverändert
+- Kampfwerte, Loot, Gegnerwerte und übrige Spielregeln.
+
+## v4.0.2
+
+### Technisch
+- Statische Importprüfung für fehlende lokale Imports und nicht erreichbare
+  JavaScript-Module ergänzt.
+- Speicherschlüssel wird aus der zentralen Spielversion abgeleitet.
+- Migration des v4.0.1-Spielstands auf den aktuellen Schlüssel ergänzt.
+- Wirkungslose Methoden und Zustände der früheren Renderer-Umschaltung sowie
+  eine tote DOM-Renderer-CSS-Regel entfernt.
+- Bestätigt, dass die bereits entfernten Altmodule `save.js`, `player.js`,
+  `items.js` und `dungeon.js` nicht Teil des aktiven Modulbaums sind.
+
+### Unverändert
+- Gameplay, Balance, Inhalte und Bedienung.
+
 ## v3.0.2
 
 ### Neu

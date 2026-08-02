@@ -10,7 +10,6 @@ export class RenderEngine {
       canvas: this.canvas,
       getGameState: () => this.game.state
     });
-    this.mode = "canvas";
     this.running = false;
     this.lastTime = performance.now();
     this.fps = 0;
@@ -62,17 +61,6 @@ export class RenderEngine {
     );
   }
 
-  setMode() {
-    this.mode = "canvas";
-    this.syncVisibility();
-  }
-
-  toggleMode() {
-    this.mode = "canvas";
-    this.syncVisibility();
-    return this.mode;
-  }
-
   observeSize() {
     const host = this.canvas.parentElement;
 
@@ -89,10 +77,6 @@ export class RenderEngine {
     this.resizeObserver.observe(host);
   }
 
-  syncVisibility() {
-    this.canvas.classList.add("active");
-  }
-
   handlePointer(event) {
     const hit = this.renderer.hitTest(
       event.clientX,
@@ -100,6 +84,8 @@ export class RenderEngine {
     );
 
     if (!hit) return;
+
+    if (hit.roomId !== this.game.currentRoom?.id) return;
 
     event.preventDefault();
 
@@ -150,23 +136,21 @@ export class RenderEngine {
       this.fpsAccumulator = 0;
     }
 
-    if (this.mode === "canvas") {
-      this.renderer.render(
-        this.game.currentRoom,
-        {
-          time: now,
-          deltaTime,
-          fps: this.fps
-        }
-      );
-    }
+    this.renderer.render(
+      this.game.currentRoom,
+      {
+        time: now,
+        deltaTime,
+        fps: this.fps
+      }
+    );
 
     requestAnimationFrame(this.boundLoop);
   }
 
   stats() {
     return {
-      mode: this.mode,
+      mode: "canvas",
       fps: this.fps,
       frameTime: this.frameTime,
       ...this.renderer.stats()
