@@ -1,6 +1,6 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 
-const SAVE_KEY = "dungeonlite.v05";
+const SAVE_KEY = "dungeonlite.v052";
 const AP_REGEN_PER_SECOND = 1;
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
@@ -27,7 +27,7 @@ export class Game {
       gold: 0,
       silverKeys: 0,
       goldKeys: 0,
-      message: "Wähle frei ein verfügbares Feld.",
+      message: "Alle sichtbaren Felder können frei ausgewählt werden.",
       player: {
         level: 1,
         xp: 0,
@@ -295,8 +295,8 @@ export class Game {
         <button type="button" class="tile ${room.type}" data-room="${room.id}" ${enemy.hp <= 0 ? "disabled" : ""}>
           <div class="health-layer ${room.type === "boss" ? "boss-fill" : "enemy-fill"}" style="transform:scaleX(${pct})"></div>
           <div class="tile-content">
-            <span class="tile-title">${Math.ceil(enemy.hp)}/${enemy.maxHp}</span>
-            <span class="tile-sub">${this.escape(enemy.name)}</span>
+            <span class="tile-title">${this.escape(enemy.name)}</span>
+            <span class="tile-sub">HP ${Math.ceil(enemy.hp)}/${enemy.maxHp} · STÄRKE ${enemy.attack}</span>
             <span class="tile-icon">${enemy.icon}</span>
           </div>
         </button>
@@ -385,6 +385,8 @@ export class Game {
   actOnRoom(id) {
     const room = this.state.dungeon.rooms[id];
     if (!room) return;
+
+    // Jede sichtbare Kachel ist jederzeit direkt auswählbar.
 
     if (room.type === "explore") {
       this.explore(room);
@@ -527,14 +529,14 @@ export class Game {
       if (!button) continue;
 
       const layer = button.querySelector(".health-layer");
-      const title = button.querySelector(".tile-title");
+      const subtitle = button.querySelector(".tile-sub");
 
       if (layer) {
         layer.style.transform = `scaleX(${Math.max(0, room.enemy.hp / room.enemy.maxHp)})`;
       }
 
-      if (title) {
-        title.textContent = `${Math.ceil(room.enemy.hp)}/${room.enemy.maxHp}`;
+      if (subtitle) {
+        subtitle.textContent = `HP ${Math.ceil(room.enemy.hp)}/${room.enemy.maxHp} · STÄRKE ${room.enemy.attack}`;
       }
     }
   }
@@ -636,8 +638,14 @@ export class Game {
 
   reset() {
     localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem("dungeonlite.v05");
+    localStorage.removeItem("dungeonlite.ui.v04");
+    localStorage.removeItem("dungeonlite.save.v03");
+    localStorage.removeItem("dungeonlite.save.v02");
+    localStorage.removeItem("dungeonlite.save.v01");
     this.state = this.createState();
     this.selectedItem = 0;
+    this.activeTab = "equipment";
     this.render();
   }
 

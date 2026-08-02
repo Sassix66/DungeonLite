@@ -548,3 +548,18 @@ button { font: inherit; }
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+
+/* Gegnerdaten direkt auf der Kachel klar lesbar. */
+.tile.enemy .tile-title,
+.tile.boss .tile-title {
+  max-width: calc(100% - 30px);
+  line-height: 1.05;
+}
+
+.tile.enemy .tile-sub,
+.tile.boss .tile-sub {
+  margin-top: 8px;
+  font-size: .68rem;
+  line-height: 1.2;
+}

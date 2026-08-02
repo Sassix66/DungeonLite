@@ -1,4 +1,4 @@
-# DungeonLite v0.5.1
+# DungeonLite v0.5.2
 
 ## Neu
 
@@ -30,3 +30,21 @@
 - 0 Diamanten
 - 0 silberne Schlüssel
 - 0 goldene Schlüssel
+
+
+## Korrekturen in v0.5.2
+
+- Alle sichtbaren Dungeonfelder sind jederzeit frei anklickbar.
+- Keine separaten Kampf- oder Ereignisfenster.
+- Gegner zeigen direkt auf der Kachel:
+  - Gegnertyp
+  - aktuelle und maximale HP
+  - Stärke
+- Neuer Speicherstandsschlüssel verhindert das Laden alter Startitems und Ressourcen.
+- Startzustand:
+  - 0 Gold
+  - 0 Diamanten
+  - 0 silberne Schlüssel
+  - 0 goldene Schlüssel
+  - leeres Inventar
+  - keine Ausrüstung
