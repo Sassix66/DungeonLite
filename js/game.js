@@ -1,7 +1,7 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 import { AudioManager } from "./audio.js";
 
-const SAVE_KEY = "dungeonlite.v08";
+const SAVE_KEY = "dungeonlite.v10";
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
 const PLAYER_REGEN_DELAY = 5000;
@@ -9,9 +9,9 @@ const PLAYER_REGEN_DELAY = 5000;
 export class Game {
   constructor(root) {
     this.root = root;
+    this.audio = new AudioManager();
     this.selectedItem = 0;
     this.activeTab = "equipment";
-    this.audio = new AudioManager();
     this.tileEffect = null;
     this.stageTransition = null;
     this.lastTick = performance.now();
@@ -20,19 +20,27 @@ export class Game {
   }
 
   start() {
+    if (this.state.currentRoomId === null || this.state.currentRoomId === undefined) {
+      this.state.currentRoomId = 0;
+    }
+
     this.render();
     requestAnimationFrame(this.loop);
   }
 
   createState() {
-    return {
-      stage: 1,
+    const state = {
+      floor: 1,
       gems: 0,
       gold: 0,
       silverKeys: 0,
       goldKeys: 0,
-      message: "Schließe alle Kacheln ab, um die nächste Etappe zu erreichen.",
       lastCombatAt: 0,
+      meditation: {
+        active: false,
+        xpBuffer: 0
+      },
+      message: "Schließe den aktuellen Raum ab und benutze Türen, um die Etage zu erkunden.",
       player: {
         level: 1,
         xp: 0,
@@ -53,110 +61,182 @@ export class Game {
         },
         inventory: []
       },
-      dungeon: this.createDungeon()
+      dungeon: null,
+      currentRoomId: 0
     };
+
+    this.state = state;
+    state.dungeon = this.createDungeon();
+    return state;
   }
 
   createDungeon() {
-    const stage = this.state?.stage || 1;
-
-    // Je weiter die Etappe, desto wahrscheinlicher sind größere Dungeons.
-    const baseCount = 3;
-    const guaranteedGrowth = Math.floor((stage - 1) / 3);
-    const bonusChance = Math.min(0.85, 0.18 + stage * 0.06);
-    let visibleCount = baseCount + guaranteedGrowth;
-
-    for (let i = 0; i < 5; i += 1) {
-      if (Math.random() < bonusChance) visibleCount += 1;
-    }
-
-    visibleCount = Math.max(3, Math.min(12, visibleCount));
-
-    const pool = [
-      "explore", "explore", "explore", "explore",
-      "enemy", "enemy", "enemy",
-      "object", "object",
-      "shrine",
-      "shop"
+    const floor = this.state?.floor || 1;
+    const roomCount = Math.min(12, 4 + Math.floor((floor - 1) / 2));
+    const positions = [{ x: 0, y: 0 }];
+    const used = new Set(["0,0"]);
+    const directions = [
+      { dx: 1, dy: 0 },
+      { dx: -1, dy: 0 },
+      { dx: 0, dy: 1 },
+      { dx: 0, dy: -1 }
     ];
 
-    // Ab späteren Etappen können Bossfelder direkt vorkommen.
-    if (stage >= 3) pool.push("boss");
+    while (positions.length < roomCount) {
+      const origin = positions[Math.floor(Math.random() * positions.length)];
+      const direction = directions[Math.floor(Math.random() * directions.length)];
+      const candidate = {
+        x: origin.x + direction.dx,
+        y: origin.y + direction.dy
+      };
+      const key = `${candidate.x},${candidate.y}`;
 
-    const chosenTypes = Array.from({ length: visibleCount }, () => {
-      return pool[Math.floor(Math.random() * pool.length)];
-    });
-
-    if (!chosenTypes.some(type => type === "enemy" || type === "boss")) {
-      chosenTypes[0] = "enemy";
+      if (!used.has(key)) {
+        used.add(key);
+        positions.push(candidate);
+      }
     }
 
-    const slots = [...Array(25).keys()]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, visibleCount);
-
-    const rooms = Array.from({ length: 25 }, (_, id) => ({
-      id,
-      type: "empty",
-      visible: false,
-      discovered: true,
-      progress: 100,
-      destroyed: false,
-      used: false,
+    const rooms = positions.map((position, index) => ({
+      id: index,
+      x: position.x,
+      y: position.y,
+      visited: index === 0,
       completed: false,
-      lastHitAt: 0
+      type: index === 0 ? "start" : this.randomRoomType(floor),
+      neighbors: {},
+      tiles: []
     }));
 
-    slots.forEach((slotId, index) => {
-      const type = chosenTypes[index];
-      const room = rooms[slotId];
+    const byPosition = new Map(
+      rooms.map(room => [`${room.x},${room.y}`, room.id])
+    );
 
-      room.type = type;
-      room.visible = true;
-      room.discovered = type !== "explore";
-      room.progress = type === "explore" ? 0 : 100;
+    for (const room of rooms) {
+      const options = {
+        up: { dx: 0, dy: -1 },
+        down: { dx: 0, dy: 1 },
+        left: { dx: -1, dy: 0 },
+        right: { dx: 1, dy: 0 }
+      };
 
-      if (type === "enemy") {
-        room.enemy = this.makeEnemy(false);
+      for (const [direction, offset] of Object.entries(options)) {
+        const neighborId = byPosition.get(
+          `${room.x + offset.dx},${room.y + offset.dy}`
+        );
+
+        if (neighborId !== undefined) {
+          room.neighbors[direction] = neighborId;
+        }
       }
 
-      if (type === "boss") {
-        room.enemy = this.makeEnemy(true);
-      }
+      room.tiles = this.createRoomTiles(room.type);
+    }
+
+    return {
+      rooms,
+      exitUnlocked: false
+    };
+  }
+
+  randomRoomType(floor) {
+    const roll = Math.random();
+
+    if (floor >= 3 && roll < 0.08) return "boss";
+    if (roll < 0.38) return "explore";
+    if (roll < 0.68) return "enemy";
+    if (roll < 0.83) return "object";
+    if (roll < 0.92) return "shrine";
+    return "trap";
+  }
+
+  createRoomTiles(roomType) {
+    const templates = {
+      start: ["explore", "explore", "object"],
+      explore: ["explore", "explore", "object", "enemy"],
+      enemy: ["enemy", "enemy", "object", "explore"],
+      object: ["object", "object", "explore", "trap"],
+      shrine: ["shrine", "explore", "object"],
+      trap: ["trap", "explore", "object", "enemy"],
+      boss: ["boss", "enemy", "object", "shrine"]
+    };
+
+    const source = templates[roomType] || templates.explore;
+    const count = Math.min(10, source.length + Math.floor(Math.random() * 3));
+
+    return Array.from({ length: count }, (_, id) => {
+      const type = source[id % source.length];
+      const tile = {
+        id,
+        type,
+        progress: type === "explore" ? 0 : 100,
+        discovered: type !== "explore",
+        completed: false,
+        used: false,
+        lastHitAt: 0
+      };
+
+      if (type === "enemy") tile.enemy = this.makeEnemy(false);
+      if (type === "boss") tile.enemy = this.makeEnemy(true);
 
       if (type === "object") {
         const isVase = Math.random() < 0.5;
-        room.object = {
+        const hp = 18 + this.state.floor * 2;
+        tile.object = {
           name: isVase ? "Vase" : "Kiste",
           icon: isVase ? "🏺" : "📦",
-          hp: 18 + stage * 2,
-          maxHp: 18 + stage * 2
+          hp,
+          maxHp: hp
         };
       }
-    });
 
-    return { rooms };
+      return tile;
+    });
   }
 
   makeEnemy(boss) {
-    const stage = this.state?.stage || 1;
+    const floor = this.state?.floor || 1;
     const pool = boss ? BOSSES : ENEMIES;
-    const baseIndex = Math.min(pool.length - 1, Math.floor((stage - 1) / 2));
-    const base = structuredClone(pool[baseIndex]);
-    const scale = 1 + (stage - 1) * (boss ? 0.22 : 0.16);
+    const tier = Math.min(pool.length - 1, Math.floor((floor - 1) / 5));
+    const base = structuredClone(pool[tier]);
+    const defense = Math.max(
+      1,
+      Math.round(base.defense * (1 + (floor - 1) * 0.035))
+    );
+    const targetClicks = boss
+      ? 9 + Math.floor(floor / 4)
+      : 4 + Math.floor(floor / 5);
+    const expectedDamage = Math.max(1, this.attack - defense * 0.55);
+    const hp = Math.max(base.hp, Math.round(expectedDamage * targetClicks));
+    const desiredDamage = this.player.maxHp * (boss ? 0.115 : 0.085);
+    const attack = Math.max(
+      base.attack,
+      Math.round(desiredDamage + this.defense * 0.55)
+    );
 
-    base.hp = Math.round(base.hp * scale);
-    base.attack = Math.round(base.attack * scale);
-    base.defense = Math.round(base.defense * (1 + (stage - 1) * 0.1));
-    base.reward = Math.round(base.reward * (1 + (stage - 1) * 0.18));
-    base.xp = Math.round(base.xp * (1 + (stage - 1) * 0.2));
-    base.maxHp = base.hp;
-
-    return base;
+    return {
+      ...base,
+      hp,
+      maxHp: hp,
+      attack,
+      defense,
+      reward: Math.round(base.reward * (1 + (floor - 1) * 0.11)),
+      xp: Math.round(base.xp * (1 + (floor - 1) * 0.13))
+    };
   }
 
   get player() {
     return this.state.player;
+  }
+
+  get currentRoom() {
+    return this.state.dungeon.rooms.find(
+      room => room.id === this.state.currentRoomId
+    );
+  }
+
+  get currentTiles() {
+    return this.currentRoom?.tiles || [];
   }
 
   get attack() {
@@ -181,6 +261,7 @@ export class Game {
     );
 
     const outOfCombatFor = now - (this.state.lastCombatAt || 0);
+
     if (
       this.state.lastCombatAt > 0 &&
       outOfCombatFor > PLAYER_REGEN_DELAY &&
@@ -192,23 +273,43 @@ export class Game {
       );
     }
 
-    let dirty = false;
+    if (this.state.meditation.active) {
+      const rate =
+        0.35 +
+        this.player.recovery * 0.25 +
+        this.state.floor * 0.04;
+
+      this.state.meditation.xpBuffer += rate * dt;
+
+      if (this.state.meditation.xpBuffer >= 1) {
+        const xp = Math.floor(this.state.meditation.xpBuffer);
+        this.state.meditation.xpBuffer -= xp;
+        this.gainXp(xp, false);
+      }
+    }
+
+    let enemyChanged = false;
 
     for (const room of this.state.dungeon.rooms) {
-      if (!room.enemy || room.enemy.hp <= 0) continue;
+      for (const tile of room.tiles) {
+        if (!tile.enemy || tile.enemy.hp <= 0 || tile.completed) continue;
 
-      const sinceHit = now - room.lastHitAt;
-      if (room.lastHitAt > 0 && sinceHit > ENEMY_REGEN_DELAY && room.enemy.hp < room.enemy.maxHp) {
-        room.enemy.hp = Math.min(room.enemy.maxHp, room.enemy.hp + ENEMY_REGEN_PER_SECOND * dt);
-        dirty = true;
+        if (
+          tile.lastHitAt > 0 &&
+          now - tile.lastHitAt > ENEMY_REGEN_DELAY &&
+          tile.enemy.hp < tile.enemy.maxHp
+        ) {
+          tile.enemy.hp = Math.min(
+            tile.enemy.maxHp,
+            tile.enemy.hp + ENEMY_REGEN_PER_SECOND * dt
+          );
+          enemyChanged = true;
+        }
       }
     }
 
     this.updateDynamicBars();
-
-    if (dirty) {
-      this.updateEnemyTiles();
-    }
+    if (enemyChanged) this.updateEnemyTiles();
 
     requestAnimationFrame(this.loop);
   }
@@ -223,7 +324,6 @@ export class Game {
           ${this.renderRightPanel()}
         </div>
       </div>
-      ${this.renderTileEffect()}
       ${this.renderStageTransition()}
     `;
 
@@ -243,11 +343,15 @@ export class Game {
           ${this.resource("🪙", Math.floor(this.state.gold))}
           ${this.resource("🗝️", this.state.silverKeys)}
           ${this.resource("🔑", this.state.goldKeys)}
-          <div class="stage-title">ETAPPE ${this.state.stage} · RUINEN</div>
+          <div class="stage-title">
+            ETAGE ${this.state.floor} · RAUM ${this.currentRoom.id + 1}
+          </div>
         </div>
 
         <div class="top-actions box">
-          <button type="button" class="icon-btn" id="soundBtn" title="Sound">${this.audio.enabled ? "🔊" : "🔇"}</button>
+          <button type="button" class="icon-btn" id="soundBtn">
+            ${this.audio.enabled ? "🔊" : "🔇"}
+          </button>
           <button type="button" class="icon-btn" id="saveBtn">💾</button>
           <button type="button" class="icon-btn danger" id="resetBtn">⏻</button>
         </div>
@@ -272,18 +376,68 @@ export class Game {
           <div class="xp-track">
             <div class="xp-fill" style="width:${Math.min(100, this.player.xp / this.player.xpNext * 100)}%"></div>
           </div>
-          <div class="talent-points">Talentpunkte: <strong>${this.player.talentPoints}</strong></div>
+          <div class="talent-points">
+            Talentpunkte: <strong>${this.player.talentPoints}</strong>
+          </div>
+        </div>
+
+        <button type="button" class="meditation-btn ${this.state.meditation.active ? "active" : ""}" id="meditationBtn">
+          ${this.state.meditation.active ? "MEDITATION BEENDEN" : "MEDITIEREN"}
+        </button>
+
+        <div class="meditation-status">
+          ${this.state.meditation.active
+            ? `Passive XP: ${(
+                0.35 +
+                this.player.recovery * 0.25 +
+                this.state.floor * 0.04
+              ).toFixed(2)}/Sek.`
+            : "Während der Meditation werden passiv Erfahrungspunkte gesammelt."}
         </div>
 
         <div class="minimap-box">
-          <div class="minimap-title">DUNGEON-MAP</div>
-          <div class="minimap">
-            ${this.state.dungeon.rooms.map(room => `
-              <div class="mini ${room.visible && !room.removed ? "revealed" : ""} ${room.type}"></div>
-            `).join("")}
-          </div>
+          <div class="minimap-title">ETAGEN-KARTE</div>
+          ${this.renderDungeonMap()}
         </div>
       </aside>
+    `;
+  }
+
+  renderDungeonMap() {
+    const rooms = this.state.dungeon.rooms;
+    const minX = Math.min(...rooms.map(room => room.x));
+    const maxX = Math.max(...rooms.map(room => room.x));
+    const minY = Math.min(...rooms.map(room => room.y));
+    const maxY = Math.max(...rooms.map(room => room.y));
+    const width = maxX - minX + 1;
+    const cells = [];
+
+    for (let y = minY; y <= maxY; y += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        const room = rooms.find(candidate => candidate.x === x && candidate.y === y);
+
+        if (!room) {
+          cells.push(`<div class="map-room empty"></div>`);
+          continue;
+        }
+
+        const classes = ["map-room"];
+        if (room.visited) classes.push("visited");
+        if (room.completed) classes.push("completed");
+        if (room.id === this.currentRoom.id) classes.push("current");
+
+        cells.push(`
+          <div class="${classes.join(" ")}">
+            ${room.id === this.currentRoom.id ? "●" : room.completed ? "✓" : ""}
+          </div>
+        `);
+      }
+    }
+
+    return `
+      <div class="zelda-map" style="grid-template-columns:repeat(${width}, 24px)">
+        ${cells.join("")}
+      </div>
     `;
   }
 
@@ -294,7 +448,8 @@ export class Game {
 
         <div class="board-wrap">
           <div class="dungeon-board">
-            ${this.state.dungeon.rooms.map(room => this.renderTile(room)).join("")}
+            ${this.currentTiles.map(tile => this.renderTile(tile)).join("")}
+            ${this.renderDoors()}
           </div>
         </div>
 
@@ -303,11 +458,45 @@ export class Game {
           <span><i style="background:#d78a3c"></i>Gegner</span>
           <span><i style="background:#4e8ec9"></i>Objekt</span>
           <span><i style="background:#76a85f"></i>Heiligtum</span>
-          <span><i style="background:#9b67d4"></i>Laden</span>
-          <span><i style="background:#e14938"></i>Boss</span>
+          <span><i style="background:#7652a7"></i>Tür</span>
+          <span><i style="background:#a77e39"></i>Treppe</span>
         </div>
       </section>
     `;
+  }
+
+  renderDoors() {
+    const doors = [];
+
+    for (const [direction, roomId] of Object.entries(this.currentRoom.neighbors)) {
+      const target = this.state.dungeon.rooms.find(room => room.id === roomId);
+      const config = {
+        up: ["TÜR OBEN", "⬆️"],
+        down: ["TÜR UNTEN", "⬇️"],
+        left: ["TÜR LINKS", "⬅️"],
+        right: ["TÜR RECHTS", "➡️"]
+      }[direction];
+
+      doors.push(`
+        <button type="button" class="tile door door-${direction}" data-door="${roomId}">
+          <span class="tile-title">${config[0]}</span>
+          <span class="tile-sub">Raum ${target.id + 1}</span>
+          <span class="tile-icon">${config[1]}</span>
+        </button>
+      `);
+    }
+
+    if (this.state.dungeon.exitUnlocked) {
+      doors.push(`
+        <button type="button" class="tile stairs" id="stairsBtn">
+          <span class="tile-title">TREPPENABGANG</span>
+          <span class="tile-sub">Zur nächsten Etage</span>
+          <span class="tile-icon">🪜</span>
+        </button>
+      `);
+    }
+
+    return doors.join("");
   }
 
   renderRightPanel() {
@@ -323,8 +512,12 @@ export class Game {
         </div>
 
         <div class="tabs">
-          <button type="button" class="tab ${this.activeTab === "equipment" ? "active" : ""}" data-tab="equipment">AUSRÜSTUNG</button>
-          <button type="button" class="tab ${this.activeTab === "inventory" ? "active" : ""}" data-tab="inventory">ITEMS</button>
+          <button type="button" class="tab ${this.activeTab === "equipment" ? "active" : ""}" data-tab="equipment">
+            AUSRÜSTUNG
+          </button>
+          <button type="button" class="tab ${this.activeTab === "inventory" ? "active" : ""}" data-tab="inventory">
+            ITEMS
+          </button>
         </div>
 
         <div class="inventory-pane">
@@ -351,142 +544,128 @@ export class Game {
         </div>
 
         <div class="bottom-actions">
-          <button type="button" class="action-btn primary" id="equipBtn" ${!selected || !selected.slot ? "disabled" : ""}>AUSRÜSTEN</button>
-          <button type="button" class="action-btn sell" id="sellBtn" ${!selected ? "disabled" : ""}>VERKAUFEN</button>
+          <button type="button" class="action-btn primary" id="equipBtn" ${!selected || !selected.slot ? "disabled" : ""}>
+            AUSRÜSTEN
+          </button>
+          <button type="button" class="action-btn sell" id="sellBtn" ${!selected ? "disabled" : ""}>
+            VERKAUFEN
+          </button>
         </div>
       </aside>
     `;
   }
 
-  renderTile(room) {
-    if (!room.visible) {
-      return `<div class="tile-spacer" aria-hidden="true"></div>`;
-    }
-
-    if (room.completed) {
+  renderTile(tile) {
+    if (tile.completed) {
       return `
         <button type="button" class="tile completed" disabled>
-          <div class="tile-content">
-            <span class="tile-title">ERLEDIGT</span>
-            <span class="tile-sub">${this.escape(this.completedLabel(room))}</span>
-            <span class="tile-icon">✓</span>
-          </div>
+          <span class="tile-title">ERLEDIGT</span>
+          <span class="tile-sub">${this.escape(this.completedLabel(tile))}</span>
+          <span class="tile-icon">✓</span>
+          ${this.renderTileEffect(tile.id)}
         </button>
       `;
     }
 
-    if (room.type === "explore" && !room.discovered) {
+    if (tile.type === "explore" && !tile.discovered) {
       return `
-        <button type="button" class="tile explore" data-room="${room.id}">
-          <div class="progress-layer" style="transform:scaleX(${room.progress / 100})"></div>
+        <button type="button" class="tile explore" data-tile="${tile.id}">
+          <div class="progress-layer" style="transform:scaleX(${tile.progress / 100})"></div>
           <div class="tile-content">
-            <span class="tile-title">${Math.floor(room.progress)}%</span>
+            <span class="tile-title">${Math.floor(tile.progress)}%</span>
             <span class="tile-sub">ERKUNDEN</span>
             <span class="tile-icon">🔎</span>
           </div>
+          ${this.renderTileEffect(tile.id)}
         </button>
       `;
     }
 
-    if (room.type === "enemy" || room.type === "boss") {
-      const enemy = room.enemy;
-      const pct = Math.max(0, enemy.hp / enemy.maxHp);
+    if (tile.type === "enemy" || tile.type === "boss") {
+      const enemy = tile.enemy;
+      const percentage = Math.max(0, enemy.hp / enemy.maxHp);
+
       return `
-        <button type="button" class="tile ${room.type}" data-room="${room.id}" ${enemy.hp <= 0 ? "disabled" : ""}>
-          <div class="health-layer ${room.type === "boss" ? "boss-fill" : "enemy-fill"}" style="transform:scaleX(${pct})"></div>
+        <button type="button" class="tile ${tile.type}" data-tile="${tile.id}">
+          <div class="health-layer ${tile.type === "boss" ? "boss-fill" : "enemy-fill"}" style="transform:scaleX(${percentage})"></div>
           <div class="tile-content">
             <span class="tile-title">${this.escape(enemy.name)}</span>
             <span class="tile-sub">HP ${Math.ceil(enemy.hp)}/${enemy.maxHp} · STÄRKE ${enemy.attack}</span>
             <span class="tile-icon">${enemy.icon}</span>
           </div>
+          ${this.renderTileEffect(tile.id)}
         </button>
       `;
     }
 
-    if (room.type === "object") {
-      const object = room.object;
-      const pct = Math.max(0, object.hp / object.maxHp);
+    if (tile.type === "object") {
+      const object = tile.object;
+      const percentage = Math.max(0, object.hp / object.maxHp);
+
       return `
-        <button type="button" class="tile object" data-room="${room.id}" ${room.destroyed ? "disabled" : ""}>
-          <div class="health-layer enemy-fill" style="transform:scaleX(${pct})"></div>
+        <button type="button" class="tile object" data-tile="${tile.id}">
+          <div class="health-layer enemy-fill" style="transform:scaleX(${percentage})"></div>
           <div class="tile-content">
-            <span class="tile-title">${room.destroyed ? "ZERSTÖRT" : `${Math.ceil(object.hp)}/${object.maxHp}`}</span>
+            <span class="tile-title">${Math.ceil(object.hp)}/${object.maxHp}</span>
             <span class="tile-sub">${this.escape(object.name)}</span>
             <span class="tile-icon">${object.icon}</span>
           </div>
+          ${this.renderTileEffect(tile.id)}
         </button>
       `;
     }
 
     const info = {
-      shrine: [room.used ? "VERBRAUCHT" : "HEILIGTUM", room.used ? "Nicht erneut nutzbar" : "HP regenerieren", "🏛️"],
+      shrine: ["HEILIGTUM", "HP regenerieren", "🏛️"],
       treasure: ["SCHATZTRUHE", "Öffnen", "🧰"],
       trap: ["FALLE", "Gefährlich", "⚠️"],
-      shop: ["LADEN", "Bald verfügbar", "🏪"]
-    }[room.type] || ["LEER", "", ""];
+      empty: ["LEER", "Abschließen", "·"]
+    }[tile.type] || ["LEER", "", ""];
 
     return `
-      <button type="button" class="tile ${room.type}" data-room="${room.id}" ${room.completed ? "disabled" : ""}>
-        <div class="tile-content">
-          <span class="tile-title">${info[0]}</span>
-          <span class="tile-sub">${info[1]}</span>
-          <span class="tile-icon">${info[2]}</span>
-        </div>
+      <button type="button" class="tile ${tile.type}" data-tile="${tile.id}">
+        <span class="tile-title">${info[0]}</span>
+        <span class="tile-sub">${info[1]}</span>
+        <span class="tile-icon">${info[2]}</span>
+        ${this.renderTileEffect(tile.id)}
       </button>
     `;
   }
 
   bind() {
-    const board = document.querySelector(".dungeon-board");
-
-    board?.addEventListener("click", event => {
-      const button = event.target.closest("[data-room]");
-      if (!button || button.disabled) return;
-
-      event.preventDefault();
-      this.actOnRoom(Number(button.dataset.room));
+    document.querySelectorAll("[data-tile]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        this.actOnTile(Number(button.dataset.tile));
+      });
     });
 
-    document.querySelectorAll("[data-item]").forEach(btn => {
-      btn.addEventListener("click", event => {
+    document.querySelectorAll("[data-door]").forEach(button => {
+      button.addEventListener("click", event => {
         event.preventDefault();
-        this.selectedItem = Number(btn.dataset.item);
+        this.moveToRoom(Number(button.dataset.door));
+      });
+    });
+
+    document.getElementById("stairsBtn")?.addEventListener("click", event => {
+      event.preventDefault();
+      this.descendFloor();
+    });
+
+    document.querySelectorAll("[data-item]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        this.selectedItem = Number(button.dataset.item);
         this.render();
       });
     });
 
-    document.querySelectorAll("[data-tab]").forEach(btn => {
-      btn.addEventListener("click", event => {
+    document.querySelectorAll("[data-tab]").forEach(button => {
+      button.addEventListener("click", event => {
         event.preventDefault();
-        this.activeTab = btn.dataset.tab;
+        this.activeTab = button.dataset.tab;
         this.render();
       });
-    });
-
-    document.getElementById("equipBtn")?.addEventListener("click", event => {
-      event.preventDefault();
-      this.equipSelected();
-    });
-
-    document.getElementById("sellBtn")?.addEventListener("click", event => {
-      event.preventDefault();
-      this.sellSelected();
-    });
-
-    document.getElementById("soundBtn")?.addEventListener("click", event => {
-      event.preventDefault();
-      this.audio.toggle();
-      this.render();
-    });
-
-    document.getElementById("saveBtn")?.addEventListener("click", event => {
-      event.preventDefault();
-      this.save();
-    });
-
-    document.getElementById("resetBtn")?.addEventListener("click", event => {
-      event.preventDefault();
-      this.reset();
     });
 
     document.querySelectorAll("[data-stat]").forEach(button => {
@@ -495,171 +674,162 @@ export class Game {
         this.spendTalentPoint(button.dataset.stat);
       });
     });
+
+    document.getElementById("equipBtn")?.addEventListener("click", () => this.equipSelected());
+    document.getElementById("sellBtn")?.addEventListener("click", () => this.sellSelected());
+    document.getElementById("meditationBtn")?.addEventListener("click", () => this.toggleMeditation());
+    document.getElementById("soundBtn")?.addEventListener("click", () => {
+      this.audio.toggle();
+      this.render();
+    });
+    document.getElementById("saveBtn")?.addEventListener("click", () => this.save());
+    document.getElementById("resetBtn")?.addEventListener("click", () => this.reset());
   }
 
-  actOnRoom(id) {
-    const room = this.state.dungeon.rooms[id];
-    if (!room || !room.visible || room.completed) return;
+  actOnTile(id) {
+    const tile = this.currentTiles.find(item => item.id === id);
+    if (!tile || tile.completed) return;
 
-    // Jede aktuell sichtbare Kachel ist jederzeit direkt auswählbar.
-
-    if (room.type === "explore") {
-      this.explore(room);
-      return;
+    if (this.state.meditation.active) {
+      this.state.meditation.active = false;
+      this.state.message = "Meditation beendet.";
     }
 
-    if (room.type === "enemy" || room.type === "boss") {
-      this.attackEnemy(room);
-      return;
-    }
+    if (tile.type === "explore") return this.explore(tile);
+    if (tile.type === "enemy" || tile.type === "boss") return this.attackEnemy(tile);
+    if (tile.type === "object") return this.attackObject(tile);
 
-    if (room.type === "object") {
-      this.attackObject(room);
-      return;
-    }
-
-    if (room.type === "shrine") {
-      if (room.used) return;
+    if (tile.type === "shrine") {
       if (!this.spendAp(5)) return;
-
-      room.used = true;
       this.audio.play("shrine");
       const heal = Math.min(25, this.player.maxHp - this.player.hp);
       this.player.hp += heal;
-      this.finishRoom(room, `Heiligtum: +${heal} HP.`);
+      this.finishTile(tile, `Heiligtum: +${heal} HP.`);
       return;
     }
 
-    if (room.type === "treasure") {
+    if (tile.type === "treasure") {
       if (!this.spendAp(3)) return;
-
       this.audio.play("treasure");
-      const roll = Math.random();
-      if (roll < 0.5) {
-        const gold = 10 + Math.floor(Math.random() * (18 + this.state.stage * 3));
+
+      if (Math.random() < 0.5) {
+        const gold = 10 + Math.floor(Math.random() * (18 + this.state.floor * 3));
         this.state.gold += gold;
         this.audio.play("gold");
-        this.finishRoom(room, `Schatztruhe geöffnet: ${gold} Gold.`);
+        this.finishTile(tile, `Schatztruhe geöffnet: ${gold} Gold.`);
       } else {
         this.player.inventory.push(structuredClone(ITEMS[4]));
         this.audio.play("potion");
-        this.finishRoom(room, "Schatztruhe geöffnet: Heiltrank gefunden.");
+        this.finishTile(tile, "Schatztruhe geöffnet: Heiltrank gefunden.");
       }
       return;
     }
 
-    if (room.type === "trap") {
+    if (tile.type === "trap") {
       if (!this.spendAp(2)) return;
-
       this.audio.play("trap");
-      const damage = 8 + this.state.stage * 2;
+      const damage = 8 + this.state.floor * 2;
       this.player.hp = Math.max(1, this.player.hp - damage);
-      this.finishRoom(room, `Falle ausgelöst: ${damage} Schaden.`);
+      this.finishTile(tile, `Falle ausgelöst: ${damage} Schaden.`);
       return;
     }
 
-    if (room.type === "shop") {
-      this.finishRoom(room, "Der Laden wird später ausgebaut.");
-      return;
-    }
-
-    if (room.type === "empty") {
+    if (tile.type === "empty") {
       if (!this.spendAp(2)) return;
-      this.finishRoom(room, "Leeres Feld abgeschlossen.");
+      this.finishTile(tile, "Leeres Feld abgeschlossen.");
     }
   }
 
-  explore(room) {
+  explore(tile) {
     if (!this.spendAp(4)) return;
 
     this.audio.play("explore");
-    room.progress = Math.min(100, room.progress + 20 + Math.random() * 8);
-    this.state.message = `Erkundung: ${Math.floor(room.progress)}%.`;
+    tile.progress = Math.min(100, tile.progress + 20 + Math.random() * 8);
+    this.state.message = `Erkundung: ${Math.floor(tile.progress)}%.`;
 
-    if (room.progress >= 100) {
-      room.discovered = true;
+    if (tile.progress >= 100) {
       const outcomes = [
-        "enemy", "enemy",
-        "object",
-        "treasure",
-        "trap",
-        "shrine",
-        "empty"
+        "enemy", "enemy", "object", "treasure",
+        "trap", "shrine", "empty"
       ];
-      room.type = outcomes[Math.floor(Math.random() * outcomes.length)];
 
-      if (room.type === "enemy") {
-        room.enemy = this.makeEnemy(false);
-      }
+      tile.discovered = true;
+      tile.type = outcomes[Math.floor(Math.random() * outcomes.length)];
 
-      if (room.type === "object") {
+      if (tile.type === "enemy") tile.enemy = this.makeEnemy(false);
+
+      if (tile.type === "object") {
         const isVase = Math.random() < 0.5;
-        room.object = {
+        const hp = 18 + this.state.floor * 2;
+        tile.object = {
           name: isVase ? "Vase" : "Kiste",
           icon: isVase ? "🏺" : "📦",
-          hp: 18 + this.state.stage * 2,
-          maxHp: 18 + this.state.stage * 2
+          hp,
+          maxHp: hp
         };
       }
 
       this.audio.play("reveal");
-      this.state.message = `Das Feld wurde aufgedeckt: ${this.completedLabel(room)}.`;
+      this.state.message = `Aufgedeckt: ${this.completedLabel(tile)}.`;
     }
 
     this.render();
   }
 
-  attackEnemy(room) {
-    if (room.enemy.hp <= 0) return;
+  attackEnemy(tile) {
+    const enemy = tile.enemy;
+    if (!enemy || enemy.hp <= 0) return;
 
-    const enemy = room.enemy;
     this.audio.play("attack");
     this.state.lastCombatAt = performance.now();
+
     const damage = this.damage(this.attack, enemy.defense);
     enemy.hp = Math.max(0, enemy.hp - damage);
-    room.lastHitAt = performance.now();
+    tile.lastHitAt = performance.now();
 
-    const retaliation = enemy.hp > 0 ? this.damage(enemy.attack, this.defense) : 0;
+    const retaliation = enemy.hp > 0
+      ? this.damage(enemy.attack, this.defense)
+      : 0;
+
     if (retaliation > 0) {
       this.audio.play("playerHit");
       this.player.hp = Math.max(1, this.player.hp - retaliation);
     }
 
-    this.state.message = `${enemy.name}: -${damage} HP${retaliation ? ` · Du: -${retaliation} HP` : ""}.`;
+    this.state.message =
+      `${enemy.name}: -${damage} HP` +
+      `${retaliation ? ` · Du: -${retaliation} HP` : ""}.`;
 
     if (enemy.hp <= 0) {
-      this.audio.play(room.type === "boss" ? "bossDefeat" : "enemyDefeat");
+      this.audio.play(tile.type === "boss" ? "bossDefeat" : "enemyDefeat");
       this.state.gold += enemy.reward;
       this.gainXp(enemy.xp);
-      this.finishRoom(room, `${enemy.name} besiegt. +${enemy.reward} Gold.`);
+      this.finishTile(tile, `${enemy.name} besiegt. +${enemy.reward} Gold.`);
       return;
     }
 
     this.render();
   }
 
-  attackObject(room) {
-    if (room.destroyed) return;
+  attackObject(tile) {
+    if (!tile.object || tile.object.hp <= 0) return;
     if (!this.spendAp(3)) return;
 
     const damage = Math.max(1, this.attack);
-    this.audio.play(room.object.name === "Vase" ? "vase" : "crate");
-    room.object.hp = Math.max(0, room.object.hp - damage);
-    this.state.message = `${room.object.name}: -${damage} Haltbarkeit.`;
+    this.audio.play(tile.object.name === "Vase" ? "vase" : "crate");
+    tile.object.hp = Math.max(0, tile.object.hp - damage);
+    this.state.message = `${tile.object.name}: -${damage} Haltbarkeit.`;
 
-    if (room.object.hp <= 0) {
-      room.destroyed = true;
-      const roll = Math.random();
-
-      if (roll < .45) {
+    if (tile.object.hp <= 0) {
+      if (Math.random() < 0.45) {
         this.player.inventory.push(structuredClone(ITEMS[4]));
         this.audio.play("potion");
-        this.finishRoom(room, `${room.object.name} zerstört: Heiltrank gefunden.`);
+        this.finishTile(tile, `${tile.object.name} zerstört: Heiltrank gefunden.`);
       } else {
         const gold = 8 + Math.floor(Math.random() * 18);
         this.state.gold += gold;
         this.audio.play("gold");
-        this.finishRoom(room, `${room.object.name} zerstört: ${gold} Gold gefunden.`);
+        this.finishTile(tile, `${tile.object.name} zerstört: ${gold} Gold gefunden.`);
       }
       return;
     }
@@ -667,43 +837,69 @@ export class Game {
     this.render();
   }
 
-  finishRoom(room, message) {
-    if (room.completed) return;
+  finishTile(tile, message) {
+    if (tile.completed) return;
 
-    room.completed = true;
-    room.used = true;
+    tile.completed = true;
+    tile.used = true;
     this.state.message = message;
-    this.playTileEffect(room);
+    this.playTileEffect(tile);
 
     window.setTimeout(() => {
-      this.checkDungeonCompletion();
+      this.checkRoomCompletion();
     }, 720);
 
     this.render();
   }
 
-  checkDungeonCompletion() {
-    const activeRooms = this.state.dungeon.rooms.filter(room => room.visible);
-    const allCompleted = activeRooms.length > 0 && activeRooms.every(room => room.completed);
+  checkRoomCompletion() {
+    const room = this.currentRoom;
+    const complete = room.tiles.length > 0 &&
+      room.tiles.every(tile => tile.completed);
 
-    if (!allCompleted) {
+    if (!complete) {
       this.render();
       return;
     }
 
-    const nextStage = this.state.stage + 1;
+    room.completed = true;
+    this.state.message = `Raum ${room.id + 1} abgeschlossen.`;
+
+    if (this.state.dungeon.rooms.every(item => item.completed)) {
+      this.state.dungeon.exitUnlocked = true;
+      this.state.message = "Alle Räume abgeschlossen. Die Treppe ist freigeschaltet.";
+    }
+
+    this.render();
+  }
+
+  moveToRoom(roomId) {
+    const target = this.state.dungeon.rooms.find(room => room.id === roomId);
+    if (!target) return;
+
+    target.visited = true;
+    this.state.currentRoomId = roomId;
+    this.state.message = `Raum ${target.id + 1} betreten.`;
+    this.render();
+  }
+
+  descendFloor() {
+    if (!this.state.dungeon.exitUnlocked) return;
+
+    const nextFloor = this.state.floor + 1;
     this.audio.play("stageComplete");
     this.stageTransition = {
-      from: this.state.stage,
-      to: nextStage
+      from: this.state.floor,
+      to: nextFloor
     };
     this.render();
 
     window.setTimeout(() => {
-      this.state.stage = nextStage;
+      this.state.floor = nextFloor;
       this.audio.play("stageStart");
       this.state.dungeon = this.createDungeon();
-      this.state.message = `Etappe ${this.state.stage} beginnt.`;
+      this.state.currentRoomId = 0;
+      this.state.message = `Etage ${this.state.floor} beginnt.`;
       this.stageTransition = null;
       this.tileEffect = null;
       this.render();
@@ -738,22 +934,83 @@ export class Game {
   }
 
   updateEnemyTiles() {
-    for (const room of this.state.dungeon.rooms) {
-      if (!room.enemy || !room.visible || room.completed) continue;
+    for (const tile of this.currentTiles) {
+      if (!tile.enemy || tile.completed) continue;
 
-      const button = document.querySelector(`[data-room="${room.id}"]`);
+      const button = document.querySelector(`[data-tile="${tile.id}"]`);
       if (!button) continue;
 
       const layer = button.querySelector(".health-layer");
       const subtitle = button.querySelector(".tile-sub");
 
       if (layer) {
-        layer.style.transform = `scaleX(${Math.max(0, room.enemy.hp / room.enemy.maxHp)})`;
+        layer.style.transform =
+          `scaleX(${Math.max(0, tile.enemy.hp / tile.enemy.maxHp)})`;
       }
 
       if (subtitle) {
-        subtitle.textContent = `HP ${Math.ceil(room.enemy.hp)}/${room.enemy.maxHp} · STÄRKE ${room.enemy.attack}`;
+        subtitle.textContent =
+          `HP ${Math.ceil(tile.enemy.hp)}/${tile.enemy.maxHp} · STÄRKE ${tile.enemy.attack}`;
       }
+    }
+  }
+
+  toggleMeditation() {
+    this.state.meditation.active = !this.state.meditation.active;
+
+    if (this.state.meditation.active) {
+      this.state.lastCombatAt = 0;
+      this.audio.play("shrine");
+      this.state.message = "Meditation begonnen. Aktionen beenden die Meditation.";
+    } else {
+      this.state.message = "Meditation beendet.";
+    }
+
+    this.render();
+  }
+
+  spendTalentPoint(stat) {
+    if (this.player.talentPoints <= 0) return;
+
+    if (stat === "hp") {
+      this.player.maxHp += 10;
+      this.player.hp += 10;
+    } else if (stat === "ap") {
+      this.player.maxAp += 5;
+      this.player.ap += 5;
+    } else if (stat === "attack") {
+      this.player.baseAttack += 1;
+    } else if (stat === "defense") {
+      this.player.baseDefense += 1;
+    } else if (stat === "recovery") {
+      this.player.recovery += 1;
+    } else {
+      return;
+    }
+
+    this.player.talentPoints -= 1;
+    this.audio.play("talent");
+    this.state.message = "Talentpunkt verteilt.";
+    this.render();
+  }
+
+  gainXp(amount, announce = true) {
+    this.player.xp += amount;
+    let leveled = false;
+
+    while (this.player.xp >= this.player.xpNext) {
+      this.player.xp -= this.player.xpNext;
+      this.player.level += 1;
+      this.player.talentPoints += 1;
+      this.player.xpNext = Math.round(this.player.xpNext * 1.35);
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 10);
+      this.audio.play("levelUp");
+      leveled = true;
+    }
+
+    if (leveled && announce) {
+      this.state.message =
+        `Level ${this.player.level} erreicht. Talentpunkt erhalten.`;
     }
   }
 
@@ -778,24 +1035,85 @@ export class Game {
     if (!item) return;
 
     this.state.gold += item.value || 5;
-    this.audio.play("sell");
     this.player.inventory.splice(this.selectedItem, 1);
     this.selectedItem = 0;
+    this.audio.play("sell");
     this.state.message = `${item.name} verkauft.`;
     this.render();
   }
 
-  gainXp(amount) {
-    this.player.xp += amount;
+  playTileEffect(tile) {
+    const effects = {
+      enemy: "blood",
+      boss: "blood-heavy",
+      treasure: "gold",
+      trap: "smoke",
+      shrine: "light",
+      explore: "spark",
+      empty: "dust"
+    };
 
-    while (this.player.xp >= this.player.xpNext) {
-      this.player.xp -= this.player.xpNext;
-      this.player.level += 1;
-      this.player.talentPoints += 1;
-      this.audio.play("levelUp");
-      this.player.xpNext = Math.round(this.player.xpNext * 1.35);
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 10);
-    }
+    this.tileEffect = {
+      tileId: tile.id,
+      type: tile.type === "object"
+        ? tile.object?.name === "Vase" ? "shards" : "splinters"
+        : effects[tile.type] || "spark"
+    };
+
+    window.setTimeout(() => {
+      this.tileEffect = null;
+      this.render();
+    }, 700);
+  }
+
+  renderTileEffect(tileId) {
+    if (!this.tileEffect || this.tileEffect.tileId !== tileId) return "";
+
+    const particles = Array.from({ length: 14 }, (_, index) => {
+      const angle = (360 / 14) * index;
+      const distance = 34 + (index % 4) * 9;
+      return `<span style="--angle:${angle}deg;--distance:${distance}px"></span>`;
+    }).join("");
+
+    return `
+      <div class="tile-effect ${this.tileEffect.type}" aria-hidden="true">
+        ${particles}
+      </div>
+    `;
+  }
+
+  renderStageTransition() {
+    if (!this.stageTransition) return "";
+
+    return `
+      <div class="stage-transition">
+        <div class="stage-transition-card">
+          <div class="stage-complete">
+            ETAGE ${this.stageTransition.from} ABGESCHLOSSEN
+          </div>
+          <div class="stage-arrow">↓</div>
+          <div class="stage-next">ETAGE ${this.stageTransition.to}</div>
+          <div class="stage-loading">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  completedLabel(tile) {
+    const labels = {
+      explore: "Erkundung",
+      enemy: "Gegner",
+      boss: "Boss",
+      object: "Objekt",
+      shrine: "Heiligtum",
+      treasure: "Schatztruhe",
+      trap: "Falle",
+      empty: "Leeres Feld"
+    };
+
+    return labels[tile.type] || "Feld";
   }
 
   resource(icon, value) {
@@ -803,7 +1121,7 @@ export class Game {
   }
 
   statCard(icon, name, value, max, fillClass, id = "", statKey = "") {
-    const pct = Math.max(5, Math.min(100, value / max * 100));
+    const percentage = Math.max(5, Math.min(100, value / max * 100));
 
     return `
       <div class="stat-card">
@@ -812,12 +1130,16 @@ export class Game {
           <div>
             <div class="stat-name">${name}</div>
             <div class="stat-bar">
-              <div id="${id}" class="stat-fill ${fillClass}" style="width:${pct}%">
-                ${name === "HP" || name === "AP" ? `${Math.floor(value)}/${max}` : Math.floor(value)}
+              <div id="${id}" class="stat-fill ${fillClass}" style="width:${percentage}%">
+                ${name === "HP" || name === "AP"
+                  ? `${Math.floor(value)}/${max}`
+                  : Math.floor(value)}
               </div>
             </div>
           </div>
-          <button type="button" class="stat-plus" data-stat="${statKey}" ${!statKey || this.player.talentPoints <= 0 ? "disabled" : ""}>+</button>
+          <button type="button" class="stat-plus" data-stat="${statKey}" ${!statKey || this.player.talentPoints <= 0 ? "disabled" : ""}>
+            +
+          </button>
         </div>
       </div>
     `;
@@ -834,115 +1156,11 @@ export class Game {
     `;
   }
 
-  playTileEffect(room) {
-    const effectMap = {
-      enemy: "blood",
-      boss: "blood-heavy",
-      object: room.object?.name === "Vase" ? "shards" : "splinters",
-      treasure: "gold",
-      trap: "smoke",
-      shrine: "light",
-      explore: "spark",
-      empty: "dust",
-      shop: "spark"
-    };
-
-    this.tileEffect = {
-      roomId: room.id,
-      type: effectMap[room.type] || "spark",
-      icon: room.object?.icon || ""
-    };
-
-    window.setTimeout(() => {
-      this.tileEffect = null;
-      this.render();
-    }, 700);
-  }
-
-  renderTileEffect() {
-    if (!this.tileEffect) return "";
-
-    const particles = Array.from({ length: 14 }, (_, index) => {
-      const angle = (360 / 14) * index;
-      const distance = 34 + (index % 4) * 9;
-      return `<span style="--angle:${angle}deg;--distance:${distance}px"></span>`;
-    }).join("");
-
-    return `
-      <div class="tile-effect-layer" aria-hidden="true">
-        <div class="tile-effect ${this.tileEffect.type}">
-          ${particles}
-        </div>
-      </div>
-    `;
-  }
-
-  renderStageTransition() {
-    if (!this.stageTransition) return "";
-
-    return `
-      <div class="stage-transition" aria-live="polite">
-        <div class="stage-transition-card">
-          <div class="stage-complete">ETAPPE ${this.stageTransition.from} ABGESCHLOSSEN</div>
-          <div class="stage-arrow">↓</div>
-          <div class="stage-next">ETAPPE ${this.stageTransition.to}</div>
-          <div class="stage-loading">
-            <span></span><span></span><span></span>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  spendTalentPoint(stat) {
-    if (this.player.talentPoints <= 0) return;
-
-    switch (stat) {
-      case "hp":
-        this.player.maxHp += 10;
-        this.player.hp += 10;
-        break;
-      case "ap":
-        this.player.maxAp += 5;
-        this.player.ap += 5;
-        break;
-      case "attack":
-        this.player.baseAttack += 1;
-        break;
-      case "defense":
-        this.player.baseDefense += 1;
-        break;
-      case "recovery":
-        this.player.recovery += 1;
-        break;
-      default:
-        return;
-    }
-
-    this.player.talentPoints -= 1;
-    this.audio.play("talent");
-    this.state.message = "Talentpunkt verteilt.";
-    this.render();
-  }
-
-  completedLabel(room) {
-    const labels = {
-      explore: "Erkundung",
-      enemy: "Gegner",
-      boss: "Boss",
-      object: "Objekt",
-      shrine: "Heiligtum",
-      treasure: "Schatztruhe",
-      trap: "Falle",
-      shop: "Laden",
-      empty: "Leeres Feld"
-    };
-
-    return labels[room.type] || "Feld";
-  }
-
   damage(attack, defense) {
-    return Math.max(1, Math.round((attack - defense * .55) * (.85 + Math.random() * .3)));
+    return Math.max(
+      1,
+      Math.round((attack - defense * 0.55) * (0.85 + Math.random() * 0.3))
+    );
   }
 
   save() {
@@ -962,17 +1180,13 @@ export class Game {
   }
 
   reset() {
-    localStorage.removeItem(SAVE_KEY);
-    localStorage.removeItem("dungeonlite.v07");
-    localStorage.removeItem("dungeonlite.v06");
-    localStorage.removeItem("dungeonlite.v054");
-    localStorage.removeItem("dungeonlite.v053");
-    localStorage.removeItem("dungeonlite.v052");
-    localStorage.removeItem("dungeonlite.v05");
-    localStorage.removeItem("dungeonlite.ui.v04");
-    localStorage.removeItem("dungeonlite.save.v03");
-    localStorage.removeItem("dungeonlite.save.v02");
-    localStorage.removeItem("dungeonlite.save.v01");
+    const keys = [
+      "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
+      "dungeonlite.v07", "dungeonlite.v06", "dungeonlite.v054",
+      "dungeonlite.v053", "dungeonlite.v052", "dungeonlite.v05"
+    ];
+
+    keys.forEach(key => localStorage.removeItem(key));
     this.state = this.createState();
     this.selectedItem = 0;
     this.activeTab = "equipment";
@@ -980,12 +1194,12 @@ export class Game {
   }
 
   escape(value) {
-    return String(value).replace(/[&<>"']/g, c => ({
+    return String(value).replace(/[&<>"']/g, character => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
       '"': "&quot;",
       "'": "&#039;"
-    })[c]);
+    })[character]);
   }
 }
