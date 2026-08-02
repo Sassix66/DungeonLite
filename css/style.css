@@ -2257,3 +2257,289 @@ body {
     font-size: .48rem;
   }
 }
+
+
+/* ================================================================
+   DungeonLite v2.2 – combat effects, miss system and compact enemies
+   ================================================================ */
+
+.tile.enemy .tile-title,
+.tile.boss .tile-title {
+  max-width: calc(100% - 30px);
+  font-size: clamp(.55rem, .72vw, .76rem);
+  line-height: 1.05;
+}
+
+.tile.enemy .tile-sub,
+.tile.boss .tile-sub {
+  max-width: calc(100% - 24px);
+  font-size: clamp(.43rem, .56vw, .6rem);
+  line-height: 1.1;
+}
+
+.tile.enemy .tile-icon,
+.tile.boss .tile-icon {
+  font-size: clamp(.85rem, 1.3vw, 1.3rem);
+}
+
+/* Completed tiles: only cracked grey stone. */
+.cracked-tile {
+  position: relative;
+  overflow: hidden;
+  opacity: .78;
+  background:
+    radial-gradient(
+      circle at 36% 30%,
+      rgba(255,255,255,.055),
+      transparent 30%
+    ),
+    linear-gradient(145deg, #5a5d60, #333639);
+}
+
+.completion-crack {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58%;
+  height: 2px;
+  border-radius: 99px;
+  background: rgba(17,19,21,.7);
+  box-shadow: 0 1px 0 rgba(255,255,255,.05);
+  transform-origin: left center;
+}
+
+.crack-one {
+  transform: rotate(18deg) translate(-15%, -50%);
+}
+
+.crack-two {
+  width: 42%;
+  transform: rotate(132deg) translate(-8%, -50%);
+}
+
+.crack-three {
+  width: 34%;
+  transform: rotate(246deg) translate(-10%, -50%);
+}
+
+/* Generic local tile effects. */
+.action-effect {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.action-effect > span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  animation: local-particle-burst .7s ease-out forwards;
+}
+
+.effect-enemy-hit > span,
+.effect-critical > span,
+.effect-enemy-defeat > span,
+.effect-boss-defeat > span {
+  background: #b52835;
+  border-radius: 55% 45% 65% 35%;
+}
+
+.effect-critical > span {
+  width: 9px;
+  height: 9px;
+  background: #ffdc72;
+  box-shadow: 0 0 7px rgba(255,220,114,.75);
+}
+
+.effect-miss > span {
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background: rgba(225,234,246,.8);
+}
+
+.effect-vase-hit > span,
+.effect-vase-break > span {
+  border-radius: 2px;
+  background: #8fb4d2;
+  transform: rotate(35deg);
+}
+
+.effect-object-hit > span,
+.effect-object-break > span {
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background: #9b6b3e;
+}
+
+.effect-explore > span,
+.effect-complete > span {
+  width: 6px;
+  height: 6px;
+  background: #74dbb7;
+  box-shadow: 0 0 6px rgba(116,219,183,.6);
+}
+
+.effect-trap > span {
+  width: 12px;
+  height: 12px;
+  background: rgba(144,114,78,.85);
+  filter: blur(.5px);
+}
+
+.effect-treasure > span {
+  background: #f2c24d;
+  box-shadow: 0 0 7px rgba(242,194,77,.65);
+}
+
+.effect-shrine > span {
+  background: #d9f0ad;
+  box-shadow: 0 0 8px rgba(217,240,173,.75);
+}
+
+@keyframes local-particle-burst {
+  0% {
+    opacity: 1;
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--particle-angle))
+      translateX(0)
+      scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--particle-angle))
+      translateX(var(--particle-distance))
+      scale(.3);
+  }
+}
+
+/* Floating damage / miss numbers. */
+.combat-floater {
+  position: absolute;
+  z-index: 12;
+  left: 50%;
+  top: 48%;
+  pointer-events: none;
+  color: #fff;
+  font-size: clamp(.8rem, 1.4vw, 1.25rem);
+  font-weight: 950;
+  letter-spacing: .02em;
+  text-shadow:
+    0 2px 3px rgba(0,0,0,.9),
+    0 0 8px rgba(255,255,255,.25);
+  animation: combat-number-fly .78s cubic-bezier(.15,.8,.28,1) forwards;
+}
+
+.floater-enemy-hit,
+.floater-vase-hit,
+.floater-object-hit {
+  color: #ffefef;
+}
+
+.floater-critical {
+  color: #ffe572;
+  font-size: clamp(1rem, 1.7vw, 1.5rem);
+}
+
+.floater-miss {
+  color: #d9e3ef;
+  font-style: italic;
+}
+
+.floater-trap {
+  color: #f0b27b;
+}
+
+@keyframes combat-number-fly {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(.7);
+  }
+
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.15);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + 18px), -42px) scale(.9);
+  }
+}
+
+/* Hit recoil and exploration feedback. */
+.tile.enemy:active,
+.tile.boss:active {
+  animation: enemy-strike-feedback .22s ease;
+}
+
+.tile.object:active {
+  animation: object-strike-feedback .24s ease;
+}
+
+.tile.explore:active {
+  animation: explore-feedback .28s ease;
+}
+
+@keyframes enemy-strike-feedback {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(-4px) scale(.985); }
+  70% { transform: translateX(4px) scale(1.01); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes object-strike-feedback {
+  0% { transform: rotate(0); }
+  35% { transform: rotate(-2deg) scale(.98); }
+  70% { transform: rotate(2deg) scale(1.01); }
+  100% { transform: rotate(0); }
+}
+
+@keyframes explore-feedback {
+  0% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.35);
+    box-shadow:
+      0 0 18px rgba(91,216,172,.28),
+      inset 0 0 12px rgba(91,216,172,.16);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .tile.enemy .tile-title,
+  .tile.boss .tile-title {
+    font-size: .43rem;
+  }
+
+  .tile.enemy .tile-sub,
+  .tile.boss .tile-sub {
+    font-size: .34rem;
+  }
+
+  .tile.enemy .tile-icon,
+  .tile.boss .tile-icon {
+    font-size: .65rem;
+  }
+
+  .combat-floater {
+    font-size: .72rem;
+  }
+}

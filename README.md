@@ -165,3 +165,99 @@ Kein AP verbrauchen:
 - Ein Heiligtum entfernt den Malus sofort.
 - Nach Ablauf der Zeit werden die normalen Werte automatisch wiederhergestellt.
 - Ausrüstung und Grundwerte selbst werden nicht dauerhaft verändert.
+
+
+## Fehlerkorrekturen in v2.1.3
+
+- Gegner mit maximal weniger als 100 HP zeigen bei voller Gesundheit einen vollständig gefüllten Balken.
+- Auch die oberste Teilleiste eines Gegners mit beispielsweise 250 Max-HP wird bei 250 HP vollständig angezeigt.
+- Gegnerregeneration verwendet nun eine stabile Echtzeitbasis.
+- Meditation startet oder stoppt die Gegnerregeneration nicht.
+- Gegner-HP und mehrschichtige Lebensleisten werden während der Regeneration direkt aktualisiert.
+- Ein erneutes Rendern durch Meditation, Inventar oder andere Menüs verursacht keine sichtbaren HP-Sprünge mehr.
+- Alte gespeicherte Trefferzeitpunkte werden automatisch auf das neue Zeitsystem migriert.
+
+
+## Kampf und Effekte in v2.2
+
+- Treffer gegen Gegner sind nicht mehr garantiert.
+- Die Grundtrefferchance hängt vom Waffentyp ab:
+  - Dolch: 94 %
+  - Magische Waffe: 90 %
+  - Schwert: 88 %
+  - Fernkampfwaffe: 86 %
+  - Schwere Waffe: 78 %
+  - Unbewaffnet: 82 %
+- Auch bei einem Fehlschlag schlägt der Gegner einmal zurück.
+- Fehlschläge werden als schwebendes `MISS` angezeigt.
+- Verursachter Schaden fliegt als negative Zahl aus der Gegnerkachel.
+- Kritische Treffer besitzen eine größere goldene Schadensanzeige.
+- Krit-Chance besitzt kein Darstellungsmaximum mehr und der Balken bleibt vollständig gefüllt.
+
+## Partikel und Animationen
+
+- Schläge gegen normale Gegner, Elitegegner und Bosse erzeugen lokale Trefferpartikel.
+- Vasen erzeugen Scherbenpartikel.
+- Kisten und andere Objekte erzeugen Splitter.
+- Erkundungskacheln besitzen eine grüne Suchanimation.
+- Fallen, Schatztruhen und Heiligtümer besitzen eigene Effekte.
+- Effekte erscheinen direkt an der jeweiligen Kachel.
+
+## Weitere Änderungen
+
+- Erledigte Kacheln zeigen keinen Text und kein Symbol mehr.
+- Sie werden grau und erhalten sichtbare Risse.
+- Gegnertexte und Gegnersymbole wurden verkleinert.
+- Fallen hinter Erkundungskacheln werden beim Aufdecken sofort ausgelöst.
+
+
+## Balancing in v2.3
+
+### Neue Verteidigungsformel
+
+Die Schadensreduktion verwendet abnehmenden Grenznutzen:
+
+`Reduktion = Verteidigung / (Verteidigung + 100)`
+
+Dadurch bleibt Verteidigung wertvoll, kann den Spieler aber nicht vollständig
+unverwundbar machen.
+
+### Mindestschaden
+
+- Jeder gegnerische Angriff verursacht mindestens 15 % seines Angriffswerts.
+- Sehr hohe Verteidigung kann Schaden stark reduzieren, aber niemals vollständig verhindern.
+
+### Gegnerskalierung
+
+Pro Etage skalieren Gegner ungefähr mit:
+
+- HP: +8 %
+- Angriff: +6 %
+- Verteidigung: +5 %
+- Gold und Erfahrung: +5 %
+
+Auf jeder fünften Etage erhalten Gegner zusätzlich 20 % auf HP, Angriff und Verteidigung.
+
+### Elite und Bosse
+
+- Elitegegner: +40 % HP und +20 % Angriff.
+- Bosse: +300 % HP und +60 % Angriff.
+- Normale Gegner: 2 % Kritchance.
+- Elitegegner: 5 % Kritchance.
+- Bosse: 10 % Kritchance.
+- Kritische Gegenangriffe verursachen doppelten Schaden.
+
+### Rüstungsdurchdringung
+
+- Etage 1–20: 0 %
+- Etage 21–40: 10 %
+- Etage 41–60: 20 %
+- Etage 61–80: 30 %
+- Etage 81+: 40 %
+
+### Lebensleisten
+
+- Normale Gegner besitzen immer genau eine prozentuale Lebensleiste.
+- Diese ist bei voller Gesundheit vollständig gefüllt, unabhängig von den maximalen HP.
+- Nur Elite- und Bossgegner besitzen mehrere übereinanderliegende 100-HP-Leisten.
+- Die zusätzliche Textanzeige der Leistenanzahl wurde entfernt.

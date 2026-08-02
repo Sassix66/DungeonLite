@@ -8,7 +8,7 @@ import {
 } from "./data.js";
 import { AudioManager } from "./audio.js";
 
-const SAVE_KEY = "dungeonlite.v212";
+const SAVE_KEY = "dungeonlite.v23";
 const ACTION_AP_COST = 4;
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
@@ -27,6 +27,7 @@ export class Game {
     this.activeTab = "equipment";
     this.activeOverlay = null;
     this.tileEffect = null;
+    this.combatFloater = null;
     this.stageTransition = null;
     this.lastTick = performance.now();
     this.xpDisplay = { blueXp: null, whiteXp: null, catchupActive: false };
@@ -125,6 +126,16 @@ export class Game {
       pending: false,
       expiresAt: 0
     };
+
+    for (const room of this.state.dungeon?.rooms || []) {
+      for (const tile of room.tiles || []) {
+        // Ältere Versionen speicherten performance.now()-Werte.
+        // Diese sind nach einem Neuladen nicht mehr vergleichbar.
+        if (tile.lastHitAt > 0 && tile.lastHitAt < 1000000000000) {
+          tile.lastHitAt = Date.now();
+        }
+      }
+    }
 
     this.state.materials ??= { iron: 0, essence: 0, crystal: 0 };
     this.state.quests ??= this.createQuests();
@@ -445,21 +456,59 @@ export class Game {
     const base = structuredClone(
       boss
         ? biome.boss
-        : biome.enemies[Math.floor(Math.random() * biome.enemies.length)]
+        : biome.enemies[
+            Math.floor(Math.random() * biome.enemies.length)
+          ]
     );
 
-    const floorScale = 1 + (this.state.floor - biome.floorFrom) * 0.07;
-    const targetClicks = boss ? 11 : elite ? 7 : 4 + Math.floor(this.state.floor / 12);
-    const defense = Math.max(1, Math.round(base.defense * floorScale));
-    const expectedDamage = Math.max(1, this.attack - defense * 0.55);
-    const hp = Math.max(
-      Math.round(base.hp * floorScale),
-      Math.round(expectedDamage * targetClicks)
+    const floorIndex = Math.max(0, this.state.floor - 1);
+
+    // Kontinuierliche Etagenskalierung:
+    // HP +8 %, Angriff +6 %, Verteidigung +5 %, Belohnungen +5 %.
+    const hpScale = Math.pow(1.08, floorIndex);
+    const attackScale = Math.pow(1.06, floorIndex);
+    const defenseScale = Math.pow(1.05, floorIndex);
+    const rewardScale = Math.pow(1.05, floorIndex);
+
+    // Jede fünfte Etage erhält einen zusätzlichen Schwierigkeitsaufschlag.
+    const milestoneMultiplier =
+      this.state.floor % 5 === 0 ? 1.20 : 1;
+
+    const eliteHpMultiplier = elite ? 1.40 : 1;
+    const eliteAttackMultiplier = elite ? 1.20 : 1;
+
+    const bossHpMultiplier = boss ? 4.00 : 1;
+    const bossAttackMultiplier = boss ? 1.60 : 1;
+
+    const defense = Math.max(
+      1,
+      Math.round(
+        base.defense *
+        defenseScale *
+        milestoneMultiplier
+      )
     );
-    const desiredDamage = this.player.maxHp * (boss ? 0.12 : elite ? 0.095 : 0.075);
+
+    const hp = Math.max(
+      1,
+      Math.round(
+        base.hp *
+        hpScale *
+        milestoneMultiplier *
+        eliteHpMultiplier *
+        bossHpMultiplier
+      )
+    );
+
     const attack = Math.max(
-      Math.round(base.attack * floorScale),
-      Math.round(desiredDamage + this.defense * 0.55)
+      1,
+      Math.round(
+        base.attack *
+        attackScale *
+        milestoneMultiplier *
+        eliteAttackMultiplier *
+        bossAttackMultiplier
+      )
     );
 
     return {
@@ -470,9 +519,33 @@ export class Game {
       defense,
       boss,
       elite,
-      reward: Math.round(base.reward * floorScale * (boss ? 2.3 : elite ? 1.6 : 1)),
-      xp: Math.round(base.xp * floorScale * (boss ? 2.3 : elite ? 1.6 : 1))
+      armorPenetration: this.enemyArmorPenetration(),
+      critChance: boss ? 10 : elite ? 5 : 2,
+      reward: Math.max(
+        1,
+        Math.round(
+          base.reward *
+          rewardScale *
+          (boss ? 2.3 : elite ? 1.6 : 1)
+        )
+      ),
+      xp: Math.max(
+        1,
+        Math.round(
+          base.xp *
+          rewardScale *
+          (boss ? 2.3 : elite ? 1.6 : 1)
+        )
+      )
     };
+  }
+
+  enemyArmorPenetration() {
+    if (this.state.floor >= 81) return 0.40;
+    if (this.state.floor >= 61) return 0.30;
+    if (this.state.floor >= 41) return 0.20;
+    if (this.state.floor >= 21) return 0.10;
+    return 0;
   }
 
   createEquipmentReward(source = "normal") {
@@ -677,20 +750,29 @@ export class Game {
       }
     }
 
+    const wallTime = Date.now();
+    let enemyHealthChanged = false;
+
     for (const room of this.state.dungeon.rooms) {
       for (const tile of room.tiles) {
         if (!tile.enemy || tile.completed || tile.enemy.hp <= 0) continue;
+
         if (
           tile.lastHitAt > 0 &&
-          now - tile.lastHitAt > ENEMY_REGEN_DELAY &&
+          wallTime - tile.lastHitAt > ENEMY_REGEN_DELAY &&
           tile.enemy.hp < tile.enemy.maxHp
         ) {
           tile.enemy.hp = Math.min(
             tile.enemy.maxHp,
             tile.enemy.hp + ENEMY_REGEN_PER_SECOND * dt
           );
+          enemyHealthChanged = true;
         }
       }
+    }
+
+    if (enemyHealthChanged) {
+      this.updateEnemyHealthDisplay();
     }
 
     if (
@@ -862,10 +944,15 @@ export class Game {
 
   renderTile(tile) {
     if (tile.completed) {
-      return `<button class="tile completed" style="${this.tileGridStyle(tile)}" disabled>
-        <span class="tile-title">ERLEDIGT</span>
-        <span class="tile-sub">${this.completedLabel(tile)}</span>
-        <span class="tile-icon">✓</span>
+      return `<button
+        class="tile completed cracked-tile"
+        style="${this.tileGridStyle(tile)}"
+        disabled
+        aria-label="Erledigte Kachel">
+        <span class="completion-crack crack-one"></span>
+        <span class="completion-crack crack-two"></span>
+        <span class="completion-crack crack-three"></span>
+        ${this.renderTileEffect(tile.id)}
       </button>`;
     }
 
@@ -877,6 +964,7 @@ export class Game {
           <span class="tile-sub">ERKUNDEN · ${ACTION_AP_COST} AP</span>
           <span class="tile-icon">🔎</span>
         </div>
+        ${this.renderTileEffect(tile.id)}
       </button>`;
     }
 
@@ -900,13 +988,14 @@ export class Game {
           <span class="tile-sub">
             HP ${Math.ceil(enemy.hp)}/${enemy.maxHp}
             · ST ${enemy.attack}
+            · KRIT ${enemy.critChance}%
+            · DURCHDR. ${Math.round(enemy.armorPenetration * 100)}%
             · ${ACTION_AP_COST} AP
-          </span>
-          <span class="enemy-bar-count">
-            ${layered ? `${this.remainingHealthBars(enemy)}/${barCount} LEISTEN` : ""}
           </span>
           <span class="tile-icon">${enemy.icon}</span>
         </div>
+        ${this.renderCombatFloater(tile.id)}
+        ${this.renderTileEffect(tile.id)}
       </button>`;
     }
 
@@ -915,6 +1004,8 @@ export class Game {
         <span class="tile-title">${Math.ceil(tile.object.hp)}/${tile.object.maxHp}</span>
         <span class="tile-sub">${tile.object.name}</span>
         <span class="tile-icon">${tile.object.icon}</span>
+        ${this.renderCombatFloater(tile.id)}
+        ${this.renderTileEffect(tile.id)}
       </button>`;
     }
 
@@ -931,21 +1022,62 @@ export class Game {
       <span class="tile-title">${info[0]}</span>
       <span class="tile-sub">${info[1]}</span>
       <span class="tile-icon">${info[2]}</span>
+      ${this.renderTileEffect(tile.id)}
     </button>`;
   }
 
   renderEnemyHealthBars(enemy, barCount) {
+    // Normale Gegner zeigen immer genau eine prozentuale Lebensleiste.
+    if (!enemy.elite && !enemy.boss) {
+      const fill = Math.max(
+        0,
+        Math.min(1, enemy.hp / enemy.maxHp)
+      );
+
+      const color = this.enemyBarColor(
+        0,
+        1,
+        enemy.hp > 0 ? 1 : 0,
+        enemy
+      );
+
+      return `
+        <div
+          class="enemy-health-stack normal-health-stack"
+          style="--health-bars:1">
+          <span class="enemy-health-segment active current-layer">
+            <span
+              class="enemy-health-fill"
+              style="
+                transform:scaleX(${fill});
+                background:${color};
+              ">
+            </span>
+          </span>
+        </div>
+      `;
+    }
+
+    // Elite- und Bossgegner behalten gestapelte 100-HP-Leisten.
     const bars = [];
     const remainingBars = this.remainingHealthBars(enemy);
 
     for (let index = 0; index < barCount; index += 1) {
       const barStart = index * 100;
+      const segmentCapacity = Math.max(
+        1,
+        Math.min(100, enemy.maxHp - barStart)
+      );
       const barHp = Math.max(
         0,
-        Math.min(100, enemy.hp - barStart)
+        Math.min(
+          segmentCapacity,
+          enemy.hp - barStart
+        )
       );
-      const fill = barHp / 100;
+      const fill = barHp / segmentCapacity;
       const active = index < remainingBars;
+
       const color = this.enemyBarColor(
         index,
         barCount,
@@ -958,7 +1090,10 @@ export class Game {
         index === Math.max(0, remainingBars - 1);
 
       bars.push(`
-        <span class="enemy-health-segment ${active ? "active" : "empty"} ${isCurrentBar ? "current-layer" : ""}">
+        <span
+          class="enemy-health-segment
+            ${active ? "active" : "empty"}
+            ${isCurrentBar ? "current-layer" : ""}">
           <span
             class="enemy-health-fill"
             style="
@@ -970,7 +1105,6 @@ export class Game {
       `);
     }
 
-    // Höchste Lebensschicht wird oben angezeigt.
     return `
       <div
         class="enemy-health-stack"
@@ -1203,43 +1337,159 @@ export class Game {
 
   explore(tile) {
     if (!this.spendAp(ACTION_AP_COST)) return;
-    tile.progress = Math.min(100, tile.progress + 20 + Math.random() * 8);
+
+    this.playTileActionEffect(tile, "explore");
+    tile.progress = Math.min(
+      100,
+      tile.progress + 20 + Math.random() * 8
+    );
+
     this.state.stats.exploredTiles += 1;
     this.updateQuest("explore", 1);
-    this.state.message = `Erkundung: ${Math.floor(tile.progress)} %.`;
+    this.state.message =
+      `Erkundung: ${Math.floor(tile.progress)} %.`;
 
     if (tile.progress >= 100) {
-      const outcomes = ["enemy", "enemy", "object", "treasure", "trap", "empty"];
-      tile.type = outcomes[Math.floor(Math.random() * outcomes.length)];
+      const outcomes = [
+        "enemy",
+        "enemy",
+        "object",
+        "treasure",
+        "trap",
+        "empty"
+      ];
+
+      tile.type =
+        outcomes[Math.floor(Math.random() * outcomes.length)];
       tile.discovered = true;
       tile.locked = tile.type === "treasure";
-      if (tile.type === "enemy") tile.enemy = this.makeEnemy(false, false);
+
+      if (tile.type === "enemy") {
+        tile.enemy = this.makeEnemy(false, false);
+      }
+
       if (tile.type === "object") {
         const hp = 18 + this.state.floor * 2;
         const vase = Math.random() < 0.5;
-        tile.object = { name: vase ? "Vase" : "Kiste", icon: vase ? "🏺" : "📦", hp, maxHp: hp };
+
+        tile.object = {
+          name: vase ? "Vase" : "Kiste",
+          icon: vase ? "🏺" : "📦",
+          hp,
+          maxHp: hp
+        };
+      }
+
+      if (tile.type === "trap") {
+        const damage = 8 + this.state.floor * 2;
+        this.player.hp -= damage;
+        tile.completed = true;
+
+        this.playTileActionEffect(
+          tile,
+          "trap",
+          `-${damage}`
+        );
+
+        this.state.message =
+          `Falle aufgedeckt und sofort ausgelöst: ` +
+          `-${damage} HP.`;
+
+        if (this.player.hp <= 0) {
+          return this.handleDefeat();
+        }
+
+        this.checkRoomCompletion(this.currentRoom.id);
       }
     }
+
     this.render();
   }
 
-  attackEnemy(tile) {
+(tile) {
     if (!this.spendAp(ACTION_AP_COST)) return;
-    const enemy = tile.enemy;
-    const critical = Math.random() * 100 < this.totalCritChance;
-    let damage = this.damage(this.attack, enemy.defense);
-    if (critical) damage *= 2;
 
-    enemy.hp = Math.max(0, enemy.hp - damage);
-    tile.lastHitAt = performance.now();
+    const enemy = tile.enemy;
+    const hitRoll = this.rollPlayerHit();
+
+    tile.lastHitAt = Date.now();
     this.state.lastCombatAt = performance.now();
 
-    if (enemy.hp > 0) {
-      const retaliation = this.damage(enemy.attack, this.defense);
+    if (!hitRoll.hit) {
+      const enemyCritical =
+        Math.random() * 100 < enemy.critChance;
+
+      let retaliation = this.damage(
+        enemy.attack,
+        this.defense,
+        enemy.armorPenetration,
+        0.15
+      );
+
+      if (enemyCritical) {
+        retaliation *= 2;
+      }
+
       this.player.hp -= retaliation;
+
+      this.playTileActionEffect(tile, "miss", "MISS");
       this.state.message =
-        `${critical ? "KRITISCH! " : ""}${enemy.name}: -${damage} HP · Du: -${retaliation} HP.`;
-      if (this.player.hp <= 0) return this.handleDefeat();
+        `Fehlschlag mit ${hitRoll.profile.label} ` +
+        `(${hitRoll.chance}% Trefferchance). ` +
+        `${enemyCritical ? "GEGNER-KRIT! " : ""}` +
+        `${enemy.name} schlägt zurück: -${retaliation} HP.`;
+
+      if (this.player.hp <= 0) {
+        return this.handleDefeat();
+      }
+
+      return this.render();
+    }
+
+    const critical =
+      Math.random() * 100 < this.totalCritChance;
+
+    let damage = this.damage(this.attack, enemy.defense);
+
+    if (critical) {
+      damage *= 2;
+    }
+
+    enemy.hp = Math.max(0, enemy.hp - damage);
+
+    this.playTileActionEffect(
+      tile,
+      critical ? "critical" : "enemy-hit",
+      `-${damage}`
+    );
+
+    if (enemy.hp > 0) {
+      const enemyCritical =
+        Math.random() * 100 < enemy.critChance;
+
+      let retaliation = this.damage(
+        enemy.attack,
+        this.defense,
+        enemy.armorPenetration,
+        0.15
+      );
+
+      if (enemyCritical) {
+        retaliation *= 2;
+      }
+
+      this.player.hp -= retaliation;
+
+      this.state.message =
+        `${critical ? "KRITISCH! " : ""}` +
+        `${enemy.name}: -${damage} HP · ` +
+        `${enemyCritical ? "GEGNER-KRIT! " : ""}` +
+        `Du: -${retaliation} HP.`;
+
+      if (this.player.hp <= 0) {
+        return this.handleDefeat();
+      }
+
       return this.render();
     }
 
@@ -1254,17 +1504,33 @@ export class Game {
       this.updateQuest("boss", 1);
     }
 
-    const dropChance = enemy.boss ? 1 : enemy.elite ? 1 : 0.12;
-    let message = `${enemy.name} besiegt. +${enemy.reward} Gold, +${enemy.xp} XP.`;
+    const dropChance =
+      enemy.boss ? 1 :
+      enemy.elite ? 1 :
+      0.12;
+
+    let message =
+      `${enemy.name} besiegt. ` +
+      `+${enemy.reward} Gold, +${enemy.xp} XP.`;
 
     if (Math.random() < dropChance) {
-      const item = this.createEquipmentReward(enemy.boss ? "boss" : enemy.elite ? "elite" : "normal");
+      const item = this.createEquipmentReward(
+        enemy.boss
+          ? "boss"
+          : enemy.elite
+            ? "elite"
+            : "normal"
+      );
+
       this.player.inventory.push(item);
       this.registerItem(item);
       message += ` Beute: ${item.name}.`;
     }
 
-    if (Math.random() < (enemy.boss ? 0.85 : enemy.elite ? 0.45 : 0.14)) {
+    if (
+      Math.random() <
+      (enemy.boss ? 0.85 : enemy.elite ? 0.45 : 0.14)
+    ) {
       this.state.silverKeys += 1;
       message += " Schlüssel gefunden.";
     }
@@ -1275,30 +1541,73 @@ export class Game {
   attackObject(tile) {
     const damage = Math.max(1, this.attack);
     tile.object.hp = Math.max(0, tile.object.hp - damage);
+
+    this.playTileActionEffect(
+      tile,
+      tile.object.name === "Vase" ? "vase-hit" : "object-hit",
+      `-${damage}`
+    );
+
     if (tile.object.hp > 0) {
-      this.state.message = `${tile.object.name}: -${damage} Haltbarkeit.`;
+      this.state.message =
+        `${tile.object.name}: -${damage} Haltbarkeit.`;
       return this.render();
     }
 
     const roll = Math.random();
+
     if (roll < 0.18) {
       this.state.silverKeys += 1;
-      return this.finishTile(tile, `${tile.object.name}: Schlüssel gefunden.`);
+      return this.finishTile(
+        tile,
+        `${tile.object.name}: Schlüssel gefunden.`
+      );
     }
+
     if (roll < 0.50) {
-      const potion = structuredClone(BASE_ITEMS.find(item => item.type === "potion"));
+      const potion = structuredClone(
+        BASE_ITEMS.find(item => item.type === "potion")
+      );
       this.player.inventory.push(potion);
-      return this.finishTile(tile, `${tile.object.name}: Heiltrank gefunden.`);
+
+      return this.finishTile(
+        tile,
+        `${tile.object.name}: Heiltrank gefunden.`
+      );
     }
 
     const gold = 8 + Math.floor(Math.random() * 20);
     this.state.gold += gold;
-    this.finishTile(tile, `${tile.object.name}: ${gold} Gold gefunden.`);
+
+    this.finishTile(
+      tile,
+      `${tile.object.name}: ${gold} Gold gefunden.`
+    );
   }
 
   finishTile(tile, message) {
     tile.completed = true;
     this.state.message = message;
+
+    if (!this.tileEffect || this.tileEffect.tileId !== tile.id) {
+      const effectType =
+        tile.type === "boss"
+          ? "boss-defeat"
+          : tile.type === "enemy"
+            ? "enemy-defeat"
+            : tile.type === "object"
+              ? tile.object?.name === "Vase"
+                ? "vase-break"
+                : "object-break"
+              : tile.type === "treasure"
+                ? "treasure"
+                : tile.type === "shrine"
+                  ? "shrine"
+                  : "complete";
+
+      this.playTileActionEffect(tile, effectType);
+    }
+
     this.checkRoomCompletion(this.currentRoom.id);
     this.render();
   }
@@ -1742,7 +2051,14 @@ export class Game {
 
   toggleMeditation() {
     if (this.player.defeated) return;
-    this.state.meditation.active = !this.state.meditation.active;
+
+    this.state.meditation.active =
+      !this.state.meditation.active;
+
+    this.state.message = this.state.meditation.active
+      ? "Meditation begonnen. Gegnerregeneration läuft unabhängig davon normal weiter."
+      : "Meditation beendet.";
+
     this.render();
   }
 
@@ -1784,6 +2100,49 @@ export class Game {
     this.render();
   }
 
+  updateEnemyHealthDisplay() {
+    for (const tile of this.currentTiles) {
+      if (!tile.enemy || tile.completed) continue;
+
+      const button = document.querySelector(
+        `[data-tile="${tile.id}"]`
+      );
+      if (!button) continue;
+
+      const enemy = tile.enemy;
+      const layered = Boolean(enemy.elite || enemy.boss);
+      const barCount = layered
+        ? Math.max(1, Math.ceil(enemy.maxHp / 100))
+        : 1;
+
+      const oldStack = button.querySelector(".enemy-health-stack");
+
+      if (oldStack) {
+        oldStack.outerHTML =
+          this.renderEnemyHealthBars(enemy, barCount);
+      }
+
+      const subtitle = button.querySelector(".tile-sub");
+
+      if (subtitle) {
+        subtitle.textContent =
+          `HP ${Math.ceil(enemy.hp)}/${enemy.maxHp}` +
+          ` · ST ${enemy.attack}` +
+          ` · KRIT ${enemy.critChance}%` +
+          ` · DURCHDR. ${Math.round(enemy.armorPenetration * 100)}%` +
+          ` · ${ACTION_AP_COST} AP`;
+      }
+
+      const count = button.querySelector(".enemy-bar-count");
+
+      if (count) {
+        count.textContent = layered
+          ? `${this.remainingHealthBars(enemy)}/${barCount} LEISTEN`
+          : "";
+      }
+    }
+  }
+
   updateDynamicBars() {
     const hpBar = document.getElementById("hpBar");
     const apBar = document.getElementById("apBar");
@@ -1797,7 +2156,12 @@ export class Game {
   }
 
   statCard(icon, name, value, max, fillClass, id = "", statKey = "") {
-    const unboundedStats = new Set(["attack", "defense", "recovery"]);
+    const unboundedStats = new Set([
+      "attack",
+      "defense",
+      "crit",
+      "recovery"
+    ]);
     const isUnbounded = unboundedStats.has(statKey);
     const percentage = isUnbounded
       ? 100
@@ -1864,10 +2228,37 @@ export class Game {
     }[tile.type] || "Feld";
   }
 
-  damage(attack, defense) {
+  damage(
+    attack,
+    defense,
+    armorPenetration = 0,
+    minimumRatio = 0.15
+  ) {
+    const effectiveDefense = Math.max(
+      0,
+      defense * (1 - armorPenetration)
+    );
+
+    const reduction =
+      effectiveDefense /
+      (effectiveDefense + 100);
+
+    const variance =
+      0.90 + Math.random() * 0.20;
+
+    const reducedDamage =
+      attack *
+      (1 - reduction) *
+      variance;
+
+    const minimumDamage =
+      attack * minimumRatio;
+
     return Math.max(
       1,
-      Math.round((attack - defense * 0.55) * (0.85 + Math.random() * 0.3))
+      Math.round(
+        Math.max(reducedDamage, minimumDamage)
+      )
     );
   }
 
