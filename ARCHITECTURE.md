@@ -45,3 +45,25 @@ Enthalten:
 - Erfahrung hinzufügen
 - Etage überspringen
 - Raum neu generieren
+
+
+## Renderer 3.0.2
+
+### `renderer/RenderEngine.js`
+Verwaltet Render-Loop, FPS, Delta-Time, Größenanpassung und Umschaltung
+zwischen DOM- und Canvas-Renderer.
+
+### `renderer/CanvasRenderer.js`
+Zeichnet den aktuellen Raum in acht festen Ebenen.
+
+### `renderer/CanvasLayer.js`
+Kapselt Zeichenbefehle je Ebene.
+
+### `renderer/Camera.js`
+Vorbereitung für spätere Kamerabewegung und Zoom.
+
+### `assets/AssetManager.js`
+Zentrale Lade- und Cache-Schicht für Bilder und JSON-Daten.
+
+Der DOM-Renderer bleibt vorerst als Rückfalloption erhalten. Der aktive
+Renderer kann im F2-Debug-Menü gewechselt werden.

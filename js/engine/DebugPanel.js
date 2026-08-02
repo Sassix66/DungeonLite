@@ -26,6 +26,16 @@ export class DebugPanel {
 
     const context = this.game.context;
 
+    const renderStats =
+      this.game.renderEngine?.stats() || {
+        mode: "dom",
+        fps: 0,
+        frameTime: 0,
+        drawCalls: 0,
+        width: 0,
+        height: 0
+      };
+
     panel.innerHTML = `
       <header>
         <strong>DEBUG 3.0.1</strong>
@@ -57,11 +67,44 @@ export class DebugPanel {
         <strong>${context.registries.enemies.values().length}</strong>
       </div>
 
+      <div class="debug-row">
+        <span>Renderer</span>
+        <strong>${renderStats.mode.toUpperCase()}</strong>
+      </div>
+
+      <div class="debug-row">
+        <span>FPS</span>
+        <strong>${renderStats.fps}</strong>
+      </div>
+
+      <div class="debug-row">
+        <span>Framezeit</span>
+        <strong>${renderStats.frameTime.toFixed(1)} ms</strong>
+      </div>
+
+      <div class="debug-row">
+        <span>Draw Calls</span>
+        <strong>${renderStats.drawCalls}</strong>
+      </div>
+
+      <div class="debug-row">
+        <span>Canvas</span>
+        <strong>${Math.round(renderStats.width)}×${Math.round(renderStats.height)}</strong>
+      </div>
+
+      <div class="debug-row">
+        <span>Vorlage</span>
+        <code>${this.game.currentRoom?.templateId || "unknown"}</code>
+      </div>
+
       <div class="debug-actions">
         <button id="debugGold">+1000 Gold</button>
         <button id="debugXp">+100 XP</button>
         <button id="debugNextFloor">Nächste Etage</button>
         <button id="debugReroll">Raum neu würfeln</button>
+        <button id="debugRenderer">
+          Renderer wechseln
+        </button>
       </div>
     `;
 
@@ -91,6 +134,12 @@ export class DebugPanel {
       room.decorations = room.tiles.decorations || [];
       room.templateId = room.tiles.templateId || "unknown";
       this.game.render();
+      this.render();
+    };
+
+    panel.querySelector("#debugRenderer").onclick = () => {
+      const mode = this.game.renderEngine?.toggleMode() || "dom";
+      localStorage.setItem("dungeonlite.renderer", mode);
       this.render();
     };
   }

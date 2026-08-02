@@ -350,3 +350,13 @@ Diese Version legt das technische Fundament für die weitere Entwicklung.
 Das eigentliche Gameplay wurde bewusst nicht verändert. Kampf, Loot,
 Dungeonkarte, Meditation, Inventar und Raumvorlagen funktionieren weiterhin
 wie in Version 2.5.
+
+
+## Canvas-Renderer in v3.0.2
+
+- Der Dungeon kann jetzt alternativ vollständig über Canvas dargestellt werden.
+- Das HUD, Inventar und die übrige Benutzeroberfläche bleiben HTML.
+- Der alte DOM-Renderer bleibt vorerst als Rückfalloption vorhanden.
+- Mit `F2` kann im Debug-Menü zwischen DOM und Canvas gewechselt werden.
+- Der aktive Renderer wird dauerhaft gespeichert.
+- Das Debug-Menü zeigt FPS, Framezeit, Draw Calls, Canvas-Größe und Raumvorlage.

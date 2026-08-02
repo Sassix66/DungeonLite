@@ -12,12 +12,13 @@ import { AudioManager } from "./audio.js";
 import { RuntimeContext } from "./engine/RuntimeContext.js";
 import { StatisticsSystem } from "./systems/StatisticsSystem.js";
 import { DebugPanel } from "./engine/DebugPanel.js";
+import { RenderEngine } from "./renderer/RenderEngine.js";
 import {
   GLOBAL_BALANCE,
   getZoneBalance
 } from "./config/balance.js";
 
-const SAVE_KEY = "dungeonlite.v301";
+const SAVE_KEY = "dungeonlite.v302";
 const ACTION_AP_COST = GLOBAL_BALANCE.actionApCost;
 const ENEMY_REGEN_DELAY = GLOBAL_BALANCE.enemyRegenDelayMs;
 const ENEMY_REGEN_PER_SECOND = GLOBAL_BALANCE.enemyRegenPerSecond;
@@ -41,6 +42,7 @@ export class Game {
     );
     this.statisticsSystem.start();
     this.debugPanel = new DebugPanel(this);
+    this.renderEngine = null;
     this.selectedItem = 0;
     this.activeTab = "equipment";
     this.inventoryFilter = "all";
@@ -138,6 +140,7 @@ export class Game {
     }
 
     this.render();
+    this.initializeRenderEngine();
     requestAnimationFrame(this.loop);
   }
 
@@ -1047,9 +1050,31 @@ export class Game {
     requestAnimationFrame(this.loop);
   }
 
+  initializeRenderEngine() {
+    if (this.renderEngine) return;
+
+    const canvas = document.getElementById("dungeonCanvas");
+
+    if (!canvas) return;
+
+    this.renderEngine = new RenderEngine({
+      game: this,
+      canvas,
+      mode: localStorage.getItem("dungeonlite.renderer") || "dom"
+    });
+
+    this.renderEngine.start();
+    this.renderEngine.syncVisibility();
+  }
+
   render() {
     const biome = this.currentBiome();
     document.documentElement.style.setProperty("--biome-accent", biome.accent);
+
+    const previousRendererMode =
+      this.renderEngine?.mode ||
+      localStorage.getItem("dungeonlite.renderer") ||
+      "dom";
 
     this.root.innerHTML = `
       <div class="game-shell biome-${biome.id}">
@@ -1065,6 +1090,17 @@ export class Game {
       ${this.renderStageTransition()}
     `;
     this.bind();
+
+    if (this.renderEngine) {
+      this.renderEngine.stop();
+      this.renderEngine = null;
+    }
+
+    this.initializeRenderEngine();
+
+    if (this.renderEngine) {
+      this.renderEngine.setMode(previousRendererMode);
+    }
   }
 
   renderTopbar() {
@@ -1189,6 +1225,7 @@ export class Game {
             <span>Alle Gegner wurden geheilt. Warte auf vollständige Genesung.</span>
           </div>` : ""}
         <div class="board-wrap">
+          <canvas id="dungeonCanvas" class="dungeon-canvas"></canvas>
           <div class="dungeon-board room-template-${this.currentRoom.type}">
             ${this.renderRoomDecorations()}
             ${this.currentTiles
