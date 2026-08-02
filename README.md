@@ -1,34 +1,28 @@
 # DungeonLite
 
-DungeonLite ist ein eigenständiges minimalistisches Browser-RPG.
+Eigenständiges minimalistisches Browser-RPG mit anklickbaren Dungeonfeldern.
 
-## Version 0.2
+## Version 0.3
 
-Enthalten:
-
-- Hauptmenü
-- Neues Spiel
-- Laden und Speichern mit LocalStorage
-- Dungeon-Etagen
-- Kämpfe und kritische Treffer
-- Erfahrung und Levelaufstieg
-- Gold
-- Heiltränke
+- Kachelbasierte Dungeon-Ansicht
+- Felder werden nacheinander freigeschaltet
+- Gegnerfelder
+- Schatzfelder
+- Schreine
+- Blockaden
+- Bossfeld
+- Ausgang zum nächsten Abschnitt
+- Kämpfe
+- Loot und Ausrüstung
 - Inventar
-- Waffen, Rüstungen und Schmuck
-- Seltenheiten: Gewöhnlich, Selten, Episch, Legendär
-- Ausrüstungsboni auf Angriff, Verteidigung und Leben
-- Responsive Oberfläche für PC und Smartphone
+- Speichern und Laden
+- Responsive Design
 
-## GitHub Pages
+## Veröffentlichung
+
+GitHub Pages:
 
 - Branch: `main`
 - Ordner: `/ (root)`
 
-## Technik
-
-- HTML
-- CSS
-- Vanilla JavaScript
-- ES6-Module
-- LocalStorage
+Alle Dateien und Ordner müssen direkt im Repository-Stamm liegen.
