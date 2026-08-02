@@ -18,7 +18,7 @@ import {
   getZoneBalance
 } from "./config/balance.js";
 
-const SAVE_KEY = "dungeonlite.v304";
+const SAVE_KEY = "dungeonlite.v400";
 const ACTION_AP_COST = GLOBAL_BALANCE.actionApCost;
 const ENEMY_REGEN_DELAY = GLOBAL_BALANCE.enemyRegenDelayMs;
 const ENEMY_REGEN_PER_SECOND = GLOBAL_BALANCE.enemyRegenPerSecond;
@@ -685,14 +685,38 @@ export class Game {
     ].join(";");
   }
 
+  pickEnemyForFloor(biome) {
+    const enemies = biome.enemies || [];
+
+    if (biome.id !== "mine" || enemies.length <= 3) {
+      return enemies[Math.floor(this.random() * enemies.length)];
+    }
+
+    const localFloor = Math.max(1, this.state.floor - biome.floorFrom + 1);
+    const unlockedCount = Math.min(
+      enemies.length,
+      3 + Math.floor((localFloor - 1) * 0.9)
+    );
+
+    const pool = enemies.slice(0, Math.max(3, unlockedCount));
+
+    // Rarely allow one enemy slightly ahead of the current progression.
+    if (
+      unlockedCount < enemies.length &&
+      this.random() < 0.12
+    ) {
+      pool.push(enemies[unlockedCount]);
+    }
+
+    return pool[Math.floor(this.random() * pool.length)];
+  }
+
   makeEnemy(boss = false, elite = false) {
     const biome = this.currentBiome();
     const base = structuredClone(
       boss
         ? biome.boss
-        : biome.enemies[
-            Math.floor(this.random() * biome.enemies.length)
-          ]
+        : this.pickEnemyForFloor(biome)
     );
 
     const floorIndex = Math.max(0, this.state.floor - 1);

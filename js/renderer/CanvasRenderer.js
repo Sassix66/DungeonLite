@@ -125,42 +125,86 @@ export class CanvasRenderer {
     };
   }
 
-  buildFloor(room) {
+  buildFloor(room, frameState = {}) {
     const layer = this.layers.get("floor");
+    const state = this.getGameState();
+    const mine = state?.floor <= 10;
 
     layer.add((ctx) => {
       const gradient = ctx.createLinearGradient(
         0, 0, 0, this.height
       );
-      gradient.addColorStop(0, "#2a2b2f");
-      gradient.addColorStop(1, "#15171b");
+
+      if (mine) {
+        gradient.addColorStop(0, "#30291f");
+        gradient.addColorStop(1, "#17130f");
+      } else {
+        gradient.addColorStop(0, "#2a2b2f");
+        gradient.addColorStop(1, "#15171b");
+      }
+
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, this.width, this.height);
-
-      ctx.strokeStyle = "rgba(255,255,255,.035)";
-      ctx.lineWidth = 1;
 
       const padding = 12;
       const cellWidth = (this.width - padding * 2) / 8;
       const cellHeight = (this.height - padding * 2) / 8;
 
-      for (let i = 0; i <= 8; i += 1) {
-        const x = padding + i * cellWidth;
-        const y = padding + i * cellHeight;
+      ctx.strokeStyle = mine
+        ? "rgba(193,156,101,.075)"
+        : "rgba(255,255,255,.035)";
+      ctx.lineWidth = 1;
 
-        ctx.beginPath();
-        ctx.moveTo(x, padding);
-        ctx.lineTo(x, this.height - padding);
-        ctx.stroke();
+      for (let row = 0; row < 8; row += 1) {
+        for (let column = 0; column < 8; column += 1) {
+          const x = padding + column * cellWidth;
+          const y = padding + row * cellHeight;
 
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(this.width - padding, y);
-        ctx.stroke();
+          ctx.fillStyle =
+            (row + column) % 2 === 0
+              ? "rgba(255,255,255,.018)"
+              : "rgba(0,0,0,.025)";
+          ctx.fillRect(x, y, cellWidth, cellHeight);
+
+          ctx.strokeRect(x, y, cellWidth, cellHeight);
+          this.drawCalls += 2;
+        }
       }
 
-      this.drawCalls += 17;
+      if (mine) {
+        this.drawMineRails(ctx, padding, cellWidth, cellHeight);
+      }
     });
+  }
+
+  drawMineRails(ctx, padding, cellWidth, cellHeight) {
+    const centerY = padding + cellHeight * 6.5;
+    const left = padding + cellWidth * 0.55;
+    const right = this.width - padding - cellWidth * 0.55;
+
+    ctx.save();
+    ctx.strokeStyle = "#514434";
+    ctx.lineWidth = Math.max(2, cellHeight * 0.055);
+
+    for (const offset of [-cellHeight * 0.10, cellHeight * 0.10]) {
+      ctx.beginPath();
+      ctx.moveTo(left, centerY + offset);
+      ctx.lineTo(right, centerY + offset);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = "#725f45";
+    ctx.lineWidth = Math.max(2, cellHeight * 0.045);
+
+    for (let x = left; x <= right; x += cellWidth * 0.42) {
+      ctx.beginPath();
+      ctx.moveTo(x, centerY - cellHeight * 0.17);
+      ctx.lineTo(x, centerY + cellHeight * 0.17);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+    this.drawCalls += 20;
   }
 
   buildWalls() {
@@ -379,28 +423,12 @@ export class CanvasRenderer {
     ctx.imageSmoothingEnabled = false;
 
     if (tile.type === "enemy" || tile.type === "boss") {
-      const boss = tile.type === "boss";
-      const elite = Boolean(tile.enemy?.elite);
-      const body = boss ? "#9c3541" : elite ? "#ba7438" : "#8d5131";
-      const outline = "#241417";
-
-      ctx.fillStyle = outline;
-      ctx.fillRect(-size * .42, -size * .38, size * .84, size * .76);
-      ctx.fillStyle = body;
-      ctx.fillRect(-size * .34, -size * .30, size * .68, size * .58);
-      ctx.fillStyle = "#f0d4a2";
-      ctx.fillRect(-size * .22, -size * .17, size * .12, size * .10);
-      ctx.fillRect(size * .10, -size * .17, size * .12, size * .10);
-      ctx.fillStyle = "#191718";
-      ctx.fillRect(-size * .18, -size * .14, size * .05, size * .05);
-      ctx.fillRect(size * .13, -size * .14, size * .05, size * .05);
-
-      if (boss) {
-        ctx.fillStyle = "#d9b24e";
-        ctx.fillRect(-size * .28, -size * .48, size * .56, size * .12);
-        ctx.fillRect(-size * .22, -size * .58, size * .10, size * .12);
-        ctx.fillRect(size * .12, -size * .58, size * .10, size * .12);
-      }
+      this.drawEnemyPlaceholder(
+        ctx,
+        tile.enemy,
+        size,
+        tile.type === "boss"
+      );
     } else if (tile.type === "object") {
       const vase = tile.object?.name === "Vase";
 
@@ -469,6 +497,165 @@ export class CanvasRenderer {
     }
 
     ctx.restore();
+  }
+
+  drawEnemyPlaceholder(ctx, enemy, size, boss = false) {
+    const archetype = enemy?.archetype || "humanoid";
+    const elite = Boolean(enemy?.elite);
+    const outline = "#181417";
+    const base =
+      boss ? "#9b3340" :
+      elite ? "#c27a36" :
+      "#8c5633";
+
+    ctx.fillStyle = outline;
+
+    if (archetype === "rat") {
+      ctx.fillRect(-size * .38, -size * .12, size * .62, size * .34);
+      ctx.fillRect(size * .12, -size * .20, size * .28, size * .28);
+      ctx.fillStyle = "#7f6a59";
+      ctx.fillRect(-size * .30, -size * .07, size * .50, size * .24);
+      ctx.fillRect(size * .15, -size * .16, size * .18, size * .18);
+      ctx.strokeStyle = "#8d7562";
+      ctx.lineWidth = Math.max(1, size * .05);
+      ctx.beginPath();
+      ctx.moveTo(-size * .34, size * .04);
+      ctx.quadraticCurveTo(-size * .62, size * .14, -size * .56, size * .30);
+      ctx.stroke();
+      return;
+    }
+
+    if (archetype === "bat") {
+      ctx.fillStyle = "#503f55";
+      ctx.beginPath();
+      ctx.moveTo(0, -size * .14);
+      ctx.lineTo(-size * .52, -size * .34);
+      ctx.lineTo(-size * .30, size * .24);
+      ctx.lineTo(0, size * .08);
+      ctx.lineTo(size * .30, size * .24);
+      ctx.lineTo(size * .52, -size * .34);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#c85a55";
+      ctx.fillRect(-size * .12, -size * .12, size * .07, size * .07);
+      ctx.fillRect(size * .05, -size * .12, size * .07, size * .07);
+      return;
+    }
+
+    if (archetype === "slime") {
+      ctx.fillStyle = "#4e7b52";
+      ctx.beginPath();
+      ctx.arc(0, size * .06, size * .34, Math.PI, 0);
+      ctx.lineTo(size * .34, size * .26);
+      ctx.lineTo(-size * .34, size * .26);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#d8e8bd";
+      ctx.fillRect(-size * .15, 0, size * .08, size * .08);
+      ctx.fillRect(size * .07, 0, size * .08, size * .08);
+      return;
+    }
+
+    if (archetype === "spider") {
+      ctx.fillStyle = "#58433a";
+      ctx.fillRect(-size * .22, -size * .18, size * .44, size * .38);
+      ctx.strokeStyle = "#302521";
+      ctx.lineWidth = Math.max(1, size * .055);
+      for (const side of [-1, 1]) {
+        for (let index = 0; index < 4; index += 1) {
+          const y = -size * .14 + index * size * .10;
+          ctx.beginPath();
+          ctx.moveTo(side * size * .16, y);
+          ctx.lineTo(side * size * (.34 + index * .035), y + (index - 1.5) * size * .05);
+          ctx.stroke();
+        }
+      }
+      return;
+    }
+
+    if (archetype === "beetle") {
+      ctx.fillStyle = "#42463d";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * .34, size * .40, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#747b63";
+      ctx.lineWidth = Math.max(1, size * .04);
+      ctx.beginPath();
+      ctx.moveTo(0, -size * .36);
+      ctx.lineTo(0, size * .34);
+      ctx.stroke();
+      return;
+    }
+
+    if (archetype === "crystal") {
+      ctx.fillStyle = "#5ca6b8";
+      ctx.beginPath();
+      ctx.moveTo(0, -size * .48);
+      ctx.lineTo(size * .30, size * .02);
+      ctx.lineTo(size * .16, size * .38);
+      ctx.lineTo(-size * .20, size * .30);
+      ctx.lineTo(-size * .32, -size * .02);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#b7edf2";
+      ctx.fillRect(-size * .05, -size * .28, size * .10, size * .30);
+      return;
+    }
+
+    if (archetype === "golem") {
+      ctx.fillStyle = "#5a5650";
+      ctx.fillRect(-size * .34, -size * .30, size * .68, size * .62);
+      ctx.fillStyle = "#81786d";
+      ctx.fillRect(-size * .25, -size * .22, size * .20, size * .18);
+      ctx.fillRect(size * .05, -size * .22, size * .20, size * .18);
+      ctx.fillStyle = "#d6b65e";
+      ctx.fillRect(-size * .05, size * .02, size * .10, size * .10);
+      return;
+    }
+
+    if (archetype === "worm") {
+      ctx.fillStyle = "#72533e";
+      for (let index = 0; index < 5; index += 1) {
+        ctx.beginPath();
+        ctx.arc(
+          -size * .28 + index * size * .14,
+          Math.sin(index) * size * .08,
+          size * .13,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+      return;
+    }
+
+    if (archetype === "drill-boss") {
+      ctx.fillStyle = outline;
+      ctx.fillRect(-size * .44, -size * .34, size * .88, size * .68);
+      ctx.fillStyle = "#7f3a35";
+      ctx.fillRect(-size * .36, -size * .26, size * .72, size * .52);
+      ctx.fillStyle = "#caa85d";
+      ctx.beginPath();
+      ctx.moveTo(size * .10, -size * .18);
+      ctx.lineTo(size * .52, 0);
+      ctx.lineTo(size * .10, size * .18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#f2d57d";
+      ctx.fillRect(-size * .20, -size * .08, size * .12, size * .12);
+      return;
+    }
+
+    // Miner, bandit and generic humanoids.
+    ctx.fillStyle = outline;
+    ctx.fillRect(-size * .34, -size * .38, size * .68, size * .76);
+    ctx.fillStyle = base;
+    ctx.fillRect(-size * .27, -size * .28, size * .54, size * .56);
+    ctx.fillStyle = "#d6b66f";
+    ctx.fillRect(-size * .28, -size * .40, size * .56, size * .12);
+    ctx.fillStyle = "#e7d1ad";
+    ctx.fillRect(-size * .16, -size * .16, size * .10, size * .08);
+    ctx.fillRect(size * .06, -size * .16, size * .10, size * .08);
   }
 
   drawDecorationPlaceholder(ctx, decoration, rect, bob) {
@@ -797,6 +984,22 @@ export class CanvasRenderer {
       ctx.font = "600 10px sans-serif";
       ctx.textAlign = "right";
       ctx.textBaseline = "bottom";
+      const state = this.getGameState();
+      const zoneLabel =
+        state?.floor <= 10
+          ? `VERLASSENE MINE · ETAGE ${state.floor}`
+          : `ETAGE ${state?.floor || "?"}`;
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(235,211,164,.72)";
+      ctx.fillText(
+        zoneLabel,
+        14,
+        this.height - 12
+      );
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(255,255,255,.48)";
       ctx.fillText(
         `Raum ${room.id + 1} · ${room.templateId || "unknown"}`,
         this.width - 14,

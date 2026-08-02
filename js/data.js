@@ -6,11 +6,28 @@ export const BIOMES = [
     floorTo: 10,
     accent: "#8d744e",
     enemies: [
-      { name: "Minenratte", icon: "🐀", hp: 30, attack: 8, defense: 1, reward: 10, xp: 12 },
-      { name: "Höhlenfledermaus", icon: "🦇", hp: 34, attack: 9, defense: 1, reward: 11, xp: 13 },
-      { name: "Schlammkriecher", icon: "🟢", hp: 42, attack: 10, defense: 2, reward: 13, xp: 15 }
+      { id: "mine-rat", archetype: "rat", name: "Minenratte", icon: "🐀", hp: 26, attack: 7, defense: 1, reward: 8, xp: 10 },
+      { id: "cave-bat", archetype: "bat", name: "Höhlenfledermaus", icon: "🦇", hp: 30, attack: 8, defense: 1, reward: 9, xp: 11 },
+      { id: "mud-crawler", archetype: "slime", name: "Schlammkriecher", icon: "🟢", hp: 38, attack: 9, defense: 2, reward: 11, xp: 13 },
+      { id: "dust-spider", archetype: "spider", name: "Staubspinne", icon: "🕷️", hp: 32, attack: 10, defense: 1, reward: 12, xp: 14 },
+      { id: "lost-miner", archetype: "miner", name: "Verlorener Bergmann", icon: "⛏️", hp: 46, attack: 11, defense: 3, reward: 14, xp: 16 },
+      { id: "ore-beetle", archetype: "beetle", name: "Erzpanzerkäfer", icon: "🪲", hp: 55, attack: 9, defense: 6, reward: 15, xp: 18 },
+      { id: "crystal-lurker", archetype: "crystal", name: "Kristalllauertier", icon: "💎", hp: 48, attack: 13, defense: 3, reward: 17, xp: 20 },
+      { id: "shaft-bandit", archetype: "bandit", name: "Schachtbandit", icon: "🗡️", hp: 52, attack: 14, defense: 4, reward: 19, xp: 22 },
+      { id: "stone-mite", archetype: "golem", name: "Steinmilbe", icon: "🪨", hp: 66, attack: 12, defense: 8, reward: 21, xp: 24 },
+      { id: "deep-worm", archetype: "worm", name: "Tiefenwurm", icon: "〰️", hp: 72, attack: 15, defense: 5, reward: 23, xp: 27 }
     ],
-    boss: { name: "Der Tiefenbohrer", icon: "⛏️", hp: 145, attack: 16, defense: 5, reward: 75, xp: 90 }
+    boss: {
+      id: "deep-drill",
+      archetype: "drill-boss",
+      name: "Der Tiefenbohrer",
+      icon: "⛏️",
+      hp: 180,
+      attack: 18,
+      defense: 7,
+      reward: 90,
+      xp: 110
+    }
   },
   {
     id: "crypt",
@@ -268,6 +285,48 @@ export const ROOM_TEMPLATES = {
         "......EE",
         "...X...."
       ]
+    },
+    {
+      id: "normal-mine-rails",
+      category: "normal",
+      layout: [
+        "V.......",
+        "..EE....",
+        "........",
+        "....V...",
+        "........",
+        ".EE.....",
+        "......V.",
+        "...X...."
+      ]
+    },
+    {
+      id: "normal-mine-pocket",
+      category: "normal",
+      layout: [
+        "........",
+        ".V.V....",
+        "........",
+        "...EE...",
+        "........",
+        "....V.V.",
+        "........",
+        "...X...."
+      ]
+    },
+    {
+      id: "normal-mine-crossfire",
+      category: "normal",
+      layout: [
+        "...EE...",
+        "........",
+        "V......V",
+        "........",
+        "V......V",
+        "........",
+        "...EE...",
+        "...X...."
+      ]
     }
   ],
 
@@ -297,6 +356,34 @@ export const ROOM_TEMPLATES = {
         "........",
         ".?....?.",
         "........",
+        "...X...."
+      ]
+    },
+    {
+      id: "explore-mine-collapse",
+      category: "explore",
+      layout: [
+        "??......",
+        "........",
+        "...V....",
+        "........",
+        "....EE..",
+        "........",
+        ".....???",
+        "...X...."
+      ]
+    },
+    {
+      id: "explore-mine-vein",
+      category: "explore",
+      layout: [
+        ".?....?.",
+        "........",
+        "...EE...",
+        "........",
+        ".?....?.",
+        "........",
+        "...V....",
         "...X...."
       ]
     }
@@ -330,6 +417,20 @@ export const ROOM_TEMPLATES = {
         "........",
         "...X...."
       ]
+    },
+    {
+      id: "treasure-mine-cache",
+      category: "treasure",
+      layout: [
+        "V......V",
+        "........",
+        "..EE....",
+        "........",
+        "...C....",
+        "........",
+        "V......V",
+        "...X...."
+      ]
     }
   ],
 
@@ -361,6 +462,20 @@ export const ROOM_TEMPLATES = {
         "........",
         "...X...."
       ]
+    },
+    {
+      id: "elite-mine-pit",
+      category: "elite",
+      layout: [
+        "........",
+        ".V....V.",
+        "........",
+        "...L....",
+        "........",
+        "..V..V..",
+        "........",
+        "...X...."
+      ]
     }
   ],
 
@@ -389,6 +504,20 @@ export const ROOM_TEMPLATES = {
         "........",
         "........",
         "..V..V..",
+        "...C....",
+        "...X...."
+      ]
+    },
+    {
+      id: "boss-mine-drillhall",
+      category: "boss",
+      layout: [
+        "V......V",
+        "........",
+        "...B....",
+        "........",
+        "........",
+        ".V....V.",
         "...C....",
         "...X...."
       ]

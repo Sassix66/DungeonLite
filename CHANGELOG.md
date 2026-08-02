@@ -76,3 +76,16 @@
 ### Entfernt
 - Umschaltung auf den alten DOM-Dungeonrenderer.
 - Sichtbare HTML-Kacheln im Dungeonbereich.
+
+
+## v4.0.0
+
+### Verlassene Mine
+- Zehn Minengegner statt drei.
+- Etagenabhängige Freischaltung der Gegner.
+- Eigene Pixel-Silhouetten für Ratte, Fledermaus, Schleim, Spinne,
+  Bergmann, Käfer, Kristallwesen, Bandit, Steinwesen und Tiefenwurm.
+- Eigene Boss-Silhouette für den Tiefenbohrer.
+- Neun zusätzliche Minenraumvorlagen.
+- Minenboden, Loren-Schienen und braun-goldene UI-Akzente.
+- Zonenname und aktuelle Etage im Canvas.

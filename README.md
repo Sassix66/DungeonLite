@@ -381,3 +381,15 @@ bleiben.
 Die bisherigen Emoji-Platzhalter im Dungeon wurden durch einfache,
 einheitliche Pixel-Platzhalter ersetzt. Diese dienen als Grundlage für die
 späteren finalen Sprites.
+
+
+## Verlassene Mine – erster Vertical Slice
+
+- Die Mine besitzt jetzt zehn unterschiedliche normale Gegnertypen.
+- Neue Gegner werden schrittweise über die ersten zehn Etagen freigeschaltet.
+- Jeder Minengegner besitzt eine eigene Canvas-Silhouette.
+- Der Tiefenbohrer besitzt eine eigene Bossdarstellung.
+- Zusätzliche Raumvorlagen für Kampf, Erkundung, Schatz, Elite und Boss.
+- Minenboden mit Steinplatten und sichtbaren Loren-Schienen.
+- Eigene Farbgebung und UI-Akzente für die Mine.
+- Zonen- und Etagenname werden direkt im Dungeon eingeblendet.
