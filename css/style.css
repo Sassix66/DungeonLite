@@ -563,3 +563,16 @@ button { font: inherit; }
   font-size: .68rem;
   line-height: 1.2;
 }
+
+
+.tile-spacer {
+  min-height: 100px;
+  border-radius: 8px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.tile.shrine:disabled {
+  opacity: .35;
+  filter: grayscale(.7);
+}

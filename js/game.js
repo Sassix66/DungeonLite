@@ -1,6 +1,6 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 
-const SAVE_KEY = "dungeonlite.v052";
+const SAVE_KEY = "dungeonlite.v053";
 const AP_REGEN_PER_SECOND = 1;
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
@@ -52,46 +52,59 @@ export class Game {
   }
 
   createDungeon() {
-    const layout = [
-      "explore","explore","explore","explore","boss",
-      "object","enemy","explore","enemy","explore",
-      "object","enemy","shop","enemy","shrine",
-      "explore","shrine","enemy","object","explore",
-      "explore","explore","explore","explore","explore"
+    const pool = [
+      "explore", "explore", "explore", "explore",
+      "enemy", "enemy", "enemy",
+      "object", "object",
+      "shrine",
+      "shop",
+      "boss"
     ];
 
-    return {
-      rooms: layout.map((type, id) => {
-        const room = {
-          id,
-          type,
-          discovered: type !== "explore",
-          available: true,
-          progress: type === "explore" ? 0 : 100,
-          destroyed: false,
-          lastHitAt: 0
+    const rooms = Array.from({ length: 25 }, (_, id) => {
+      const type = pool[Math.floor(Math.random() * pool.length)];
+      const room = {
+        id,
+        type,
+        visible: false,
+        discovered: type !== "explore",
+        progress: type === "explore" ? 0 : 100,
+        destroyed: false,
+        used: false,
+        removed: false,
+        lastHitAt: 0
+      };
+
+      if (type === "enemy") {
+        room.enemy = this.makeEnemy(false);
+      }
+
+      if (type === "boss") {
+        room.enemy = this.makeEnemy(true);
+      }
+
+      if (type === "object") {
+        const isVase = Math.random() < 0.5;
+        room.object = {
+          name: isVase ? "Vase" : "Kiste",
+          icon: isVase ? "🏺" : "📦",
+          hp: 18,
+          maxHp: 18
         };
+      }
 
-        if (type === "enemy") {
-          room.enemy = this.makeEnemy(false);
-        }
+      return room;
+    });
 
-        if (type === "boss") {
-          room.enemy = this.makeEnemy(true);
-        }
+    // Zu Beginn sind nur drei oder vier zufällige Felder sichtbar.
+    const initialCount = 3 + Math.floor(Math.random() * 2);
+    const shuffled = [...rooms].sort(() => Math.random() - 0.5);
 
-        if (type === "object") {
-          room.object = {
-            name: Math.random() < .5 ? "Vase" : "Kiste",
-            icon: Math.random() < .5 ? "🏺" : "📦",
-            hp: 18,
-            maxHp: 18
-          };
-        }
+    shuffled.slice(0, initialCount).forEach(room => {
+      room.visible = true;
+    });
 
-        return room;
-      })
-    };
+    return { rooms };
   }
 
   makeEnemy(boss) {
@@ -195,7 +208,7 @@ export class Game {
           <div class="minimap-title">DUNGEON-MAP</div>
           <div class="minimap">
             ${this.state.dungeon.rooms.map(room => `
-              <div class="mini ${room.discovered ? "revealed" : ""} ${room.type}"></div>
+              <div class="mini ${room.visible && !room.removed ? "revealed" : ""} ${room.type}"></div>
             `).join("")}
           </div>
         </div>
@@ -275,6 +288,10 @@ export class Game {
   }
 
   renderTile(room) {
+    if (!room.visible || room.removed) {
+      return `<div class="tile-spacer" aria-hidden="true"></div>`;
+    }
+
     if (room.type === "explore" && !room.discovered) {
       return `
         <button type="button" class="tile explore" data-room="${room.id}">
@@ -319,12 +336,12 @@ export class Game {
     }
 
     const info = {
-      shrine: ["HEILIGTUM", "HP regenerieren", "🏛️"],
+      shrine: [room.used ? "VERBRAUCHT" : "HEILIGTUM", room.used ? "Nicht erneut nutzbar" : "HP regenerieren", "🏛️"],
       shop: ["LADEN", "Bald verfügbar", "🏪"]
     }[room.type] || ["LEER", "", ""];
 
     return `
-      <button type="button" class="tile ${room.type}" data-room="${room.id}">
+      <button type="button" class="tile ${room.type}" data-room="${room.id}" ${room.type === "shrine" && room.used ? "disabled" : ""}>
         <div class="tile-content">
           <span class="tile-title">${info[0]}</span>
           <span class="tile-sub">${info[1]}</span>
@@ -384,9 +401,9 @@ export class Game {
 
   actOnRoom(id) {
     const room = this.state.dungeon.rooms[id];
-    if (!room) return;
+    if (!room || !room.visible || room.removed) return;
 
-    // Jede sichtbare Kachel ist jederzeit direkt auswählbar.
+    // Jede aktuell sichtbare Kachel ist jederzeit direkt auswählbar.
 
     if (room.type === "explore") {
       this.explore(room);
@@ -404,17 +421,24 @@ export class Game {
     }
 
     if (room.type === "shrine") {
+      if (room.used) return;
       if (!this.spendAp(5)) return;
+
+      room.used = true;
       const heal = Math.min(25, this.player.maxHp - this.player.hp);
       this.player.hp += heal;
-      this.state.message = `Heiligtum: +${heal} HP.`;
-      this.render();
+      this.finishRoom(room, `Heiligtum: +${heal} HP.`);
       return;
     }
 
     if (room.type === "shop") {
-      this.state.message = "Der Laden folgt in einer späteren Version.";
-      this.render();
+      this.finishRoom(room, "Der Laden wird später ausgebaut.");
+      return;
+    }
+
+    if (room.type === "empty") {
+      if (!this.spendAp(2)) return;
+      this.finishRoom(room, "Leeres Feld abgeschlossen.");
     }
   }
 
@@ -464,7 +488,8 @@ export class Game {
     if (enemy.hp <= 0) {
       this.state.gold += enemy.reward;
       this.gainXp(enemy.xp);
-      this.state.message = `${enemy.name} besiegt. +${enemy.reward} Gold.`;
+      this.finishRoom(room, `${enemy.name} besiegt. +${enemy.reward} Gold.`);
+      return;
     }
 
     this.render();
@@ -484,15 +509,32 @@ export class Game {
 
       if (roll < .45) {
         this.player.inventory.push(structuredClone(ITEMS[4]));
-        this.state.message = `${room.object.name} zerstört: Heiltrank gefunden.`;
+        this.finishRoom(room, `${room.object.name} zerstört: Heiltrank gefunden.`);
       } else {
         const gold = 8 + Math.floor(Math.random() * 18);
         this.state.gold += gold;
-        this.state.message = `${room.object.name} zerstört: ${gold} Gold gefunden.`;
+        this.finishRoom(room, `${room.object.name} zerstört: ${gold} Gold gefunden.`);
       }
+      return;
     }
 
     this.render();
+  }
+
+  finishRoom(room, message) {
+    room.removed = true;
+    room.visible = false;
+    this.state.message = message;
+    this.revealReplacement();
+    this.render();
+  }
+
+  revealReplacement() {
+    const hidden = this.state.dungeon.rooms.filter(room => !room.visible && !room.removed);
+    if (hidden.length === 0) return;
+
+    const target = hidden[Math.floor(Math.random() * hidden.length)];
+    target.visible = true;
   }
 
   spendAp(cost) {
@@ -523,7 +565,7 @@ export class Game {
 
   updateEnemyTiles() {
     for (const room of this.state.dungeon.rooms) {
-      if (!room.enemy) continue;
+      if (!room.enemy || !room.visible || room.removed) continue;
 
       const button = document.querySelector(`[data-room="${room.id}"]`);
       if (!button) continue;
@@ -638,6 +680,7 @@ export class Game {
 
   reset() {
     localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem("dungeonlite.v052");
     localStorage.removeItem("dungeonlite.v05");
     localStorage.removeItem("dungeonlite.ui.v04");
     localStorage.removeItem("dungeonlite.save.v03");

@@ -1,4 +1,4 @@
-# DungeonLite v0.5.2
+# DungeonLite v0.5.3
 
 ## Neu
 
@@ -48,3 +48,12 @@
   - 0 goldene Schlüssel
   - leeres Inventar
   - keine Ausrüstung
+
+
+## Änderungen in v0.5.3
+
+- Heiligtümer können nur einmal benutzt werden.
+- Zu Beginn sind nur drei oder vier Dungeonfelder sichtbar.
+- Nach Abschluss verschwindet ein Feld vollständig.
+- Für jedes entfernte Feld wird ein neues zufälliges Feld sichtbar.
+- Dadurch bleibt der Dungeon übersichtlich und nie komplett gefüllt.
