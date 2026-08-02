@@ -1,17 +1,19 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
+import { AudioManager } from "./audio.js";
 
-const SAVE_KEY = "dungeonlite.v054";
-const AP_REGEN_PER_SECOND = 1;
+const SAVE_KEY = "dungeonlite.v08";
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
 const PLAYER_REGEN_DELAY = 5000;
-const PLAYER_REGEN_PER_SECOND = 1.5;
 
 export class Game {
   constructor(root) {
     this.root = root;
     this.selectedItem = 0;
     this.activeTab = "equipment";
+    this.audio = new AudioManager();
+    this.tileEffect = null;
+    this.stageTransition = null;
     this.lastTick = performance.now();
     this.state = this.load() || this.createState();
     this.loop = this.loop.bind(this);
@@ -41,7 +43,8 @@ export class Game {
         maxAp: 50,
         baseAttack: 12,
         baseDefense: 5,
-        recovery: 8,
+        recovery: 1,
+        talentPoints: 0,
         equipment: {
           weapon: null,
           helmet: null,
@@ -55,26 +58,42 @@ export class Game {
   }
 
   createDungeon() {
+    const stage = this.state?.stage || 1;
+
+    // Je weiter die Etappe, desto wahrscheinlicher sind größere Dungeons.
+    const baseCount = 3;
+    const guaranteedGrowth = Math.floor((stage - 1) / 3);
+    const bonusChance = Math.min(0.85, 0.18 + stage * 0.06);
+    let visibleCount = baseCount + guaranteedGrowth;
+
+    for (let i = 0; i < 5; i += 1) {
+      if (Math.random() < bonusChance) visibleCount += 1;
+    }
+
+    visibleCount = Math.max(3, Math.min(12, visibleCount));
+
     const pool = [
-      "explore", "explore", "explore",
-      "enemy", "enemy",
+      "explore", "explore", "explore", "explore",
+      "enemy", "enemy", "enemy",
       "object", "object",
       "shrine",
-      "shop",
-      "boss"
+      "shop"
     ];
 
-    const visibleCount = 3 + Math.floor(Math.random() * 2);
+    // Ab späteren Etappen können Bossfelder direkt vorkommen.
+    if (stage >= 3) pool.push("boss");
+
     const chosenTypes = Array.from({ length: visibleCount }, () => {
       return pool[Math.floor(Math.random() * pool.length)];
     });
 
-    // Ab Etappe 2 ist immer mindestens ein Gegner dabei.
-    if (this.state?.stage > 1 && !chosenTypes.some(type => type === "enemy" || type === "boss")) {
+    if (!chosenTypes.some(type => type === "enemy" || type === "boss")) {
       chosenTypes[0] = "enemy";
     }
 
-    const slots = [...Array(25).keys()].sort(() => Math.random() - 0.5).slice(0, visibleCount);
+    const slots = [...Array(25).keys()]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, visibleCount);
 
     const rooms = Array.from({ length: 25 }, (_, id) => ({
       id,
@@ -110,8 +129,8 @@ export class Game {
         room.object = {
           name: isVase ? "Vase" : "Kiste",
           icon: isVase ? "🏺" : "📦",
-          hp: 18,
-          maxHp: 18
+          hp: 18 + stage * 2,
+          maxHp: 18 + stage * 2
         };
       }
     });
@@ -120,8 +139,19 @@ export class Game {
   }
 
   makeEnemy(boss) {
-    const base = structuredClone(boss ? BOSSES[0] : ENEMIES[Math.floor(Math.random() * ENEMIES.length)]);
+    const stage = this.state?.stage || 1;
+    const pool = boss ? BOSSES : ENEMIES;
+    const baseIndex = Math.min(pool.length - 1, Math.floor((stage - 1) / 2));
+    const base = structuredClone(pool[baseIndex]);
+    const scale = 1 + (stage - 1) * (boss ? 0.22 : 0.16);
+
+    base.hp = Math.round(base.hp * scale);
+    base.attack = Math.round(base.attack * scale);
+    base.defense = Math.round(base.defense * (1 + (stage - 1) * 0.1));
+    base.reward = Math.round(base.reward * (1 + (stage - 1) * 0.18));
+    base.xp = Math.round(base.xp * (1 + (stage - 1) * 0.2));
     base.maxHp = base.hp;
+
     return base;
   }
 
@@ -145,7 +175,10 @@ export class Game {
     const dt = Math.min(1, (now - this.lastTick) / 1000);
     this.lastTick = now;
 
-    this.player.ap = Math.min(this.player.maxAp, this.player.ap + AP_REGEN_PER_SECOND * dt);
+    this.player.ap = Math.min(
+      this.player.maxAp,
+      this.player.ap + this.player.recovery * dt
+    );
 
     const outOfCombatFor = now - (this.state.lastCombatAt || 0);
     if (
@@ -155,7 +188,7 @@ export class Game {
     ) {
       this.player.hp = Math.min(
         this.player.maxHp,
-        this.player.hp + PLAYER_REGEN_PER_SECOND * dt
+        this.player.hp + this.player.recovery * dt
       );
     }
 
@@ -190,6 +223,8 @@ export class Game {
           ${this.renderRightPanel()}
         </div>
       </div>
+      ${this.renderTileEffect()}
+      ${this.renderStageTransition()}
     `;
 
     this.bind();
@@ -212,6 +247,7 @@ export class Game {
         </div>
 
         <div class="top-actions box">
+          <button type="button" class="icon-btn" id="soundBtn" title="Sound">${this.audio.enabled ? "🔊" : "🔇"}</button>
           <button type="button" class="icon-btn" id="saveBtn">💾</button>
           <button type="button" class="icon-btn danger" id="resetBtn">⏻</button>
         </div>
@@ -222,11 +258,22 @@ export class Game {
   renderSidebar() {
     return `
       <aside class="sidebar box">
-        ${this.statCard("❤️", "HP", this.player.hp, this.player.maxHp, "hp-fill", "hpBar")}
-        ${this.statCard("⚡", "AP", this.player.ap, this.player.maxAp, "ap-fill", "apBar")}
-        ${this.statCard("🗡️", "ANGRIFF", this.attack, 100, "atk-fill")}
-        ${this.statCard("🛡️", "VERTEIDIGUNG", this.defense, 100, "def-fill")}
-        ${this.statCard("💧", "ERHOLUNG", this.player.recovery, 100, "rcv-fill")}
+        ${this.statCard("❤️", "HP", this.player.hp, this.player.maxHp, "hp-fill", "hpBar", "hp")}
+        ${this.statCard("⚡", "AP", this.player.ap, this.player.maxAp, "ap-fill", "apBar", "ap")}
+        ${this.statCard("🗡️", "ANGRIFF", this.attack, 100, "atk-fill", "", "attack")}
+        ${this.statCard("🛡️", "VERTEIDIGUNG", this.defense, 100, "def-fill", "", "defense")}
+        ${this.statCard("💧", "ERHOLUNG", this.player.recovery, 100, "rcv-fill", "", "recovery")}
+
+        <div class="xp-card">
+          <div class="xp-head">
+            <span>ERFAHRUNG</span>
+            <strong>${Math.floor(this.player.xp)}/${this.player.xpNext}</strong>
+          </div>
+          <div class="xp-track">
+            <div class="xp-fill" style="width:${Math.min(100, this.player.xp / this.player.xpNext * 100)}%"></div>
+          </div>
+          <div class="talent-points">Talentpunkte: <strong>${this.player.talentPoints}</strong></div>
+        </div>
 
         <div class="minimap-box">
           <div class="minimap-title">DUNGEON-MAP</div>
@@ -373,6 +420,8 @@ export class Game {
 
     const info = {
       shrine: [room.used ? "VERBRAUCHT" : "HEILIGTUM", room.used ? "Nicht erneut nutzbar" : "HP regenerieren", "🏛️"],
+      treasure: ["SCHATZTRUHE", "Öffnen", "🧰"],
+      trap: ["FALLE", "Gefährlich", "⚠️"],
       shop: ["LADEN", "Bald verfügbar", "🏪"]
     }[room.type] || ["LEER", "", ""];
 
@@ -424,6 +473,12 @@ export class Game {
       this.sellSelected();
     });
 
+    document.getElementById("soundBtn")?.addEventListener("click", event => {
+      event.preventDefault();
+      this.audio.toggle();
+      this.render();
+    });
+
     document.getElementById("saveBtn")?.addEventListener("click", event => {
       event.preventDefault();
       this.save();
@@ -432,6 +487,13 @@ export class Game {
     document.getElementById("resetBtn")?.addEventListener("click", event => {
       event.preventDefault();
       this.reset();
+    });
+
+    document.querySelectorAll("[data-stat]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        this.spendTalentPoint(button.dataset.stat);
+      });
     });
   }
 
@@ -461,9 +523,38 @@ export class Game {
       if (!this.spendAp(5)) return;
 
       room.used = true;
+      this.audio.play("shrine");
       const heal = Math.min(25, this.player.maxHp - this.player.hp);
       this.player.hp += heal;
       this.finishRoom(room, `Heiligtum: +${heal} HP.`);
+      return;
+    }
+
+    if (room.type === "treasure") {
+      if (!this.spendAp(3)) return;
+
+      this.audio.play("treasure");
+      const roll = Math.random();
+      if (roll < 0.5) {
+        const gold = 10 + Math.floor(Math.random() * (18 + this.state.stage * 3));
+        this.state.gold += gold;
+        this.audio.play("gold");
+        this.finishRoom(room, `Schatztruhe geöffnet: ${gold} Gold.`);
+      } else {
+        this.player.inventory.push(structuredClone(ITEMS[4]));
+        this.audio.play("potion");
+        this.finishRoom(room, "Schatztruhe geöffnet: Heiltrank gefunden.");
+      }
+      return;
+    }
+
+    if (room.type === "trap") {
+      if (!this.spendAp(2)) return;
+
+      this.audio.play("trap");
+      const damage = 8 + this.state.stage * 2;
+      this.player.hp = Math.max(1, this.player.hp - damage);
+      this.finishRoom(room, `Falle ausgelöst: ${damage} Schaden.`);
       return;
     }
 
@@ -481,25 +572,38 @@ export class Game {
   explore(room) {
     if (!this.spendAp(4)) return;
 
+    this.audio.play("explore");
     room.progress = Math.min(100, room.progress + 20 + Math.random() * 8);
     this.state.message = `Erkundung: ${Math.floor(room.progress)}%.`;
 
     if (room.progress >= 100) {
       room.discovered = true;
-      const outcomes = ["enemy", "object", "shrine", "empty"];
+      const outcomes = [
+        "enemy", "enemy",
+        "object",
+        "treasure",
+        "trap",
+        "shrine",
+        "empty"
+      ];
       room.type = outcomes[Math.floor(Math.random() * outcomes.length)];
 
-      if (room.type === "enemy") room.enemy = this.makeEnemy(false);
+      if (room.type === "enemy") {
+        room.enemy = this.makeEnemy(false);
+      }
+
       if (room.type === "object") {
+        const isVase = Math.random() < 0.5;
         room.object = {
-          name: Math.random() < .5 ? "Vase" : "Kiste",
-          icon: Math.random() < .5 ? "🏺" : "📦",
-          hp: 18,
-          maxHp: 18
+          name: isVase ? "Vase" : "Kiste",
+          icon: isVase ? "🏺" : "📦",
+          hp: 18 + this.state.stage * 2,
+          maxHp: 18 + this.state.stage * 2
         };
       }
 
-      this.state.message = `Das Feld wurde aufgedeckt: ${room.type}.`;
+      this.audio.play("reveal");
+      this.state.message = `Das Feld wurde aufgedeckt: ${this.completedLabel(room)}.`;
     }
 
     this.render();
@@ -507,9 +611,9 @@ export class Game {
 
   attackEnemy(room) {
     if (room.enemy.hp <= 0) return;
-    if (!this.spendAp(room.type === "boss" ? 7 : 5)) return;
 
     const enemy = room.enemy;
+    this.audio.play("attack");
     this.state.lastCombatAt = performance.now();
     const damage = this.damage(this.attack, enemy.defense);
     enemy.hp = Math.max(0, enemy.hp - damage);
@@ -517,12 +621,14 @@ export class Game {
 
     const retaliation = enemy.hp > 0 ? this.damage(enemy.attack, this.defense) : 0;
     if (retaliation > 0) {
+      this.audio.play("playerHit");
       this.player.hp = Math.max(1, this.player.hp - retaliation);
     }
 
     this.state.message = `${enemy.name}: -${damage} HP${retaliation ? ` · Du: -${retaliation} HP` : ""}.`;
 
     if (enemy.hp <= 0) {
+      this.audio.play(room.type === "boss" ? "bossDefeat" : "enemyDefeat");
       this.state.gold += enemy.reward;
       this.gainXp(enemy.xp);
       this.finishRoom(room, `${enemy.name} besiegt. +${enemy.reward} Gold.`);
@@ -537,6 +643,7 @@ export class Game {
     if (!this.spendAp(3)) return;
 
     const damage = Math.max(1, this.attack);
+    this.audio.play(room.object.name === "Vase" ? "vase" : "crate");
     room.object.hp = Math.max(0, room.object.hp - damage);
     this.state.message = `${room.object.name}: -${damage} Haltbarkeit.`;
 
@@ -546,10 +653,12 @@ export class Game {
 
       if (roll < .45) {
         this.player.inventory.push(structuredClone(ITEMS[4]));
+        this.audio.play("potion");
         this.finishRoom(room, `${room.object.name} zerstört: Heiltrank gefunden.`);
       } else {
         const gold = 8 + Math.floor(Math.random() * 18);
         this.state.gold += gold;
+        this.audio.play("gold");
         this.finishRoom(room, `${room.object.name} zerstört: ${gold} Gold gefunden.`);
       }
       return;
@@ -559,27 +668,51 @@ export class Game {
   }
 
   finishRoom(room, message) {
+    if (room.completed) return;
+
     room.completed = true;
     room.used = true;
     this.state.message = message;
-    this.checkDungeonCompletion();
+    this.playTileEffect(room);
+
+    window.setTimeout(() => {
+      this.checkDungeonCompletion();
+    }, 720);
+
+    this.render();
   }
 
   checkDungeonCompletion() {
     const activeRooms = this.state.dungeon.rooms.filter(room => room.visible);
     const allCompleted = activeRooms.length > 0 && activeRooms.every(room => room.completed);
 
-    if (allCompleted) {
-      this.state.stage += 1;
-      this.state.dungeon = this.createDungeon();
-      this.state.message = `Etappe ${this.state.stage} beginnt.`;
+    if (!allCompleted) {
+      this.render();
+      return;
     }
 
+    const nextStage = this.state.stage + 1;
+    this.audio.play("stageComplete");
+    this.stageTransition = {
+      from: this.state.stage,
+      to: nextStage
+    };
     this.render();
+
+    window.setTimeout(() => {
+      this.state.stage = nextStage;
+      this.audio.play("stageStart");
+      this.state.dungeon = this.createDungeon();
+      this.state.message = `Etappe ${this.state.stage} beginnt.`;
+      this.stageTransition = null;
+      this.tileEffect = null;
+      this.render();
+    }, 1450);
   }
 
   spendAp(cost) {
     if (this.player.ap < cost) {
+      this.audio.play("error");
       this.state.message = "Nicht genug Ausdauer.";
       this.render();
       return false;
@@ -635,6 +768,7 @@ export class Game {
     if (old) this.player.inventory.push(old);
 
     this.selectedItem = 0;
+    this.audio.play("equip");
     this.state.message = `${item.name} ausgerüstet.`;
     this.render();
   }
@@ -644,6 +778,7 @@ export class Game {
     if (!item) return;
 
     this.state.gold += item.value || 5;
+    this.audio.play("sell");
     this.player.inventory.splice(this.selectedItem, 1);
     this.selectedItem = 0;
     this.state.message = `${item.name} verkauft.`;
@@ -653,14 +788,13 @@ export class Game {
   gainXp(amount) {
     this.player.xp += amount;
 
-    if (this.player.xp >= this.player.xpNext) {
+    while (this.player.xp >= this.player.xpNext) {
       this.player.xp -= this.player.xpNext;
       this.player.level += 1;
+      this.player.talentPoints += 1;
+      this.audio.play("levelUp");
       this.player.xpNext = Math.round(this.player.xpNext * 1.35);
-      this.player.maxHp += 15;
-      this.player.hp = this.player.maxHp;
-      this.player.baseAttack += 3;
-      this.player.baseDefense += 2;
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 10);
     }
   }
 
@@ -668,7 +802,7 @@ export class Game {
     return `<div class="resource"><span>${icon}</span><span>${value}</span></div>`;
   }
 
-  statCard(icon, name, value, max, fillClass, id = "") {
+  statCard(icon, name, value, max, fillClass, id = "", statKey = "") {
     const pct = Math.max(5, Math.min(100, value / max * 100));
 
     return `
@@ -683,7 +817,7 @@ export class Game {
               </div>
             </div>
           </div>
-          <button type="button" class="stat-plus">+</button>
+          <button type="button" class="stat-plus" data-stat="${statKey}" ${!statKey || this.player.talentPoints <= 0 ? "disabled" : ""}>+</button>
         </div>
       </div>
     `;
@@ -700,6 +834,97 @@ export class Game {
     `;
   }
 
+  playTileEffect(room) {
+    const effectMap = {
+      enemy: "blood",
+      boss: "blood-heavy",
+      object: room.object?.name === "Vase" ? "shards" : "splinters",
+      treasure: "gold",
+      trap: "smoke",
+      shrine: "light",
+      explore: "spark",
+      empty: "dust",
+      shop: "spark"
+    };
+
+    this.tileEffect = {
+      roomId: room.id,
+      type: effectMap[room.type] || "spark",
+      icon: room.object?.icon || ""
+    };
+
+    window.setTimeout(() => {
+      this.tileEffect = null;
+      this.render();
+    }, 700);
+  }
+
+  renderTileEffect() {
+    if (!this.tileEffect) return "";
+
+    const particles = Array.from({ length: 14 }, (_, index) => {
+      const angle = (360 / 14) * index;
+      const distance = 34 + (index % 4) * 9;
+      return `<span style="--angle:${angle}deg;--distance:${distance}px"></span>`;
+    }).join("");
+
+    return `
+      <div class="tile-effect-layer" aria-hidden="true">
+        <div class="tile-effect ${this.tileEffect.type}">
+          ${particles}
+        </div>
+      </div>
+    `;
+  }
+
+  renderStageTransition() {
+    if (!this.stageTransition) return "";
+
+    return `
+      <div class="stage-transition" aria-live="polite">
+        <div class="stage-transition-card">
+          <div class="stage-complete">ETAPPE ${this.stageTransition.from} ABGESCHLOSSEN</div>
+          <div class="stage-arrow">↓</div>
+          <div class="stage-next">ETAPPE ${this.stageTransition.to}</div>
+          <div class="stage-loading">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  spendTalentPoint(stat) {
+    if (this.player.talentPoints <= 0) return;
+
+    switch (stat) {
+      case "hp":
+        this.player.maxHp += 10;
+        this.player.hp += 10;
+        break;
+      case "ap":
+        this.player.maxAp += 5;
+        this.player.ap += 5;
+        break;
+      case "attack":
+        this.player.baseAttack += 1;
+        break;
+      case "defense":
+        this.player.baseDefense += 1;
+        break;
+      case "recovery":
+        this.player.recovery += 1;
+        break;
+      default:
+        return;
+    }
+
+    this.player.talentPoints -= 1;
+    this.audio.play("talent");
+    this.state.message = "Talentpunkt verteilt.";
+    this.render();
+  }
+
   completedLabel(room) {
     const labels = {
       explore: "Erkundung",
@@ -707,6 +932,8 @@ export class Game {
       boss: "Boss",
       object: "Objekt",
       shrine: "Heiligtum",
+      treasure: "Schatztruhe",
+      trap: "Falle",
       shop: "Laden",
       empty: "Leeres Feld"
     };
@@ -719,6 +946,7 @@ export class Game {
   }
 
   save() {
+    this.audio.play("save");
     localStorage.setItem(SAVE_KEY, JSON.stringify(this.state));
     this.state.message = "Spiel gespeichert.";
     this.render();
@@ -735,6 +963,9 @@ export class Game {
 
   reset() {
     localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem("dungeonlite.v07");
+    localStorage.removeItem("dungeonlite.v06");
+    localStorage.removeItem("dungeonlite.v054");
     localStorage.removeItem("dungeonlite.v053");
     localStorage.removeItem("dungeonlite.v052");
     localStorage.removeItem("dungeonlite.v05");

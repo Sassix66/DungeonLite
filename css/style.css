@@ -592,3 +592,238 @@ button { font: inherit; }
 .tile.completed .tile-sub {
   color: #c0c5ce;
 }
+
+
+.xp-card {
+  margin: 12px 0;
+  padding: 10px;
+  border-radius: 11px;
+  background: #18243a;
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+.xp-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: .78rem;
+  font-weight: 850;
+}
+
+.xp-track {
+  height: 12px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #0c1320;
+}
+
+.xp-fill {
+  height: 100%;
+  background: #6e88df;
+  transition: width .2s ease;
+}
+
+.talent-points {
+  margin-top: 7px;
+  color: #e8c56e;
+  font-size: .8rem;
+}
+
+.tile.treasure {
+  background: #3f75ad;
+}
+
+.tile.trap {
+  background: #7a5935;
+}
+
+.stat-plus:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+
+/* Abschlussanimationen für Kacheln */
+.tile-effect-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.tile-effect {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+
+.tile-effect span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: burst-particle .68s ease-out forwards;
+}
+
+.tile-effect.blood span {
+  background: #a91d2d;
+  border-radius: 60% 40% 70% 30%;
+}
+
+.tile-effect.blood-heavy span {
+  width: 14px;
+  height: 14px;
+  background: #7d101c;
+  border-radius: 55% 45% 65% 35%;
+}
+
+.tile-effect.shards span {
+  background: #85a6d8;
+  border-radius: 2px;
+  transform: translate(-50%, -50%) rotate(35deg);
+}
+
+.tile-effect.splinters span {
+  width: 5px;
+  height: 16px;
+  background: #9b6b3e;
+  border-radius: 2px;
+}
+
+.tile-effect.gold span {
+  background: #f2c23f;
+  box-shadow: 0 0 8px rgba(242,194,63,.7);
+}
+
+.tile-effect.smoke span {
+  width: 18px;
+  height: 18px;
+  background: rgba(120,126,138,.8);
+  filter: blur(1px);
+}
+
+.tile-effect.light span {
+  background: #d9f4a8;
+  box-shadow: 0 0 12px rgba(217,244,168,.9);
+}
+
+.tile-effect.spark span {
+  width: 7px;
+  height: 7px;
+  background: #71dcb7;
+  box-shadow: 0 0 9px rgba(113,220,183,.8);
+}
+
+.tile-effect.dust span {
+  background: #8a7d6a;
+  opacity: .8;
+}
+
+@keyframes burst-particle {
+  0% {
+    opacity: 1;
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--angle))
+      translateX(0)
+      scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--angle))
+      translateX(var(--distance))
+      scale(.35);
+  }
+}
+
+/* Etappenübergang */
+.stage-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at center, rgba(74,92,132,.38), rgba(4,8,14,.94));
+  animation: stage-overlay-in .3s ease forwards;
+}
+
+.stage-transition-card {
+  width: min(520px, 100%);
+  padding: 30px 22px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 18px;
+  background: rgba(18,27,43,.96);
+  text-align: center;
+  box-shadow: 0 25px 70px rgba(0,0,0,.45);
+  animation: stage-card-in .48s cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+.stage-complete {
+  color: #aeb8c9;
+  font-size: .9rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.stage-arrow {
+  margin: 12px 0;
+  color: #f0c45f;
+  font-size: 2rem;
+  animation: stage-arrow 1s ease-in-out infinite;
+}
+
+.stage-next {
+  color: #f2d37f;
+  font-size: clamp(1.8rem, 5vw, 3.2rem);
+  font-weight: 950;
+  letter-spacing: .04em;
+}
+
+.stage-loading {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.stage-loading span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #7fa0da;
+  animation: stage-dot .9s ease-in-out infinite;
+}
+
+.stage-loading span:nth-child(2) { animation-delay: .14s; }
+.stage-loading span:nth-child(3) { animation-delay: .28s; }
+
+@keyframes stage-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes stage-card-in {
+  from { opacity: 0; transform: translateY(16px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes stage-arrow {
+  0%, 100% { transform: translateY(0); opacity: .65; }
+  50% { transform: translateY(6px); opacity: 1; }
+}
+
+@keyframes stage-dot {
+  0%, 100% { transform: translateY(0); opacity: .35; }
+  50% { transform: translateY(-6px); opacity: 1; }
+}

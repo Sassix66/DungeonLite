@@ -1,4 +1,4 @@
-# DungeonLite v0.5.4
+# DungeonLite v0.8
 
 ## Neu
 
@@ -67,3 +67,77 @@
 - Erst wenn alle vorhandenen Kacheln erledigt sind, startet automatisch die nächste Etappe.
 - Die nächste Etappe erzeugt einen komplett neuen Dungeon.
 - Der Spieler regeneriert langsam HP, wenn mindestens fünf Sekunden lang kein Kampf stattgefunden hat.
+
+
+## Neu in v0.6
+
+- Die Anzahl der Dungeonkacheln steigt mit fortschreitender Etappe wahrscheinlicher an.
+- Gegner skalieren mit der Etappe:
+  - mehr HP
+  - mehr Angriff
+  - mehr Verteidigung
+  - bessere Belohnungen
+- Erkundungsfelder können jetzt verbergen:
+  - Gegner
+  - zerstörbare Objekte
+  - Schatztruhen
+  - Fallen
+  - Heiligtümer
+  - leere Felder
+- Erfahrungsbalken in der linken Seitenleiste.
+- Jeder Levelaufstieg gibt einen Talentpunkt.
+- Talentpunkte können frei verteilt werden auf:
+  - HP
+  - AP
+  - Angriff
+  - Verteidigung
+  - Erholung
+- Erholung startet bei 1.
+- Erholung bestimmt pro Sekunde:
+  - AP-Regeneration
+  - HP-Regeneration außerhalb des Kampfes
+
+
+## Neu in v0.7
+
+- Angriffe gegen Gegner und Bosse verbrauchen keine Ausdauer mehr.
+- Jede abgeschlossene Kachel besitzt eine typabhängige Animation:
+  - Gegner: Blutspritzer
+  - Boss: stärkere Bluteffekte
+  - Vase: Scherben
+  - Kiste: Holzsplitter
+  - Schatz: Goldpartikel
+  - Falle: Rauch
+  - Heiligtum: Lichtpartikel
+  - Erkundung: Funken
+- Nach Abschluss aller Kacheln erscheint ein animierter Etappenübergang.
+- Die nächste Etappe wird erst nach der Übergangsanimation geladen.
+
+
+## Neu in v0.8
+
+Browsergenerierte Soundeffekte für:
+
+- Spielerangriff
+- erlittenen Schaden
+- Gegnerbesiegung
+- Bossbesiegung
+- Erkundung
+- Aufdecken eines Feldes
+- zerbrechende Vasen
+- zerbrechende Kisten
+- Schatztruhen
+- Goldfunde
+- Heiltränke
+- Fallen
+- Heiligtümer
+- Levelaufstieg
+- Talentverteilung
+- Ausrüstung
+- Verkauf
+- Speichern
+- Etappenabschluss
+- Start der nächsten Etappe
+- fehlende Ausdauer
+
+Der Sound kann oben rechts ein- und ausgeschaltet werden. Browser erlauben Audio erst nach der ersten Benutzerinteraktion.
