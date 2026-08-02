@@ -9,6 +9,10 @@
   --danger: #d95c5c;
   --line: rgba(255,255,255,.09);
   --radius: 16px;
+  --common: #d5d8df;
+  --rare: #68a7ff;
+  --epic: #c985ff;
+  --legendary: #ffb347;
 }
 
 * { box-sizing: border-box; }
@@ -28,7 +32,7 @@ body {
 button { font: inherit; }
 
 #app {
-  width: min(100%, 720px);
+  width: min(100%, 760px);
   min-height: 100vh;
   margin: 0 auto;
   padding: 20px 16px 28px;
@@ -149,9 +153,15 @@ button { font: inherit; }
   line-height: 1.55;
 }
 
-.inventory { display: grid; gap: 9px; margin: 14px 0; }
+.inventory,
+.equipment-grid {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
 
-.item {
+.item,
+.equipment-slot {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
@@ -162,6 +172,12 @@ button { font: inherit; }
   background: var(--panel-2);
 }
 
+.item-name { font-weight: 800; }
+.rarity-common { color: var(--common); }
+.rarity-rare { color: var(--rare); }
+.rarity-epic { color: var(--epic); }
+.rarity-legendary { color: var(--legendary); }
+
 .notice {
   margin: 12px 0;
   padding: 12px;
@@ -169,6 +185,12 @@ button { font: inherit; }
   border-radius: 8px;
   color: #eadfbf;
   background: rgba(215,173,85,.08);
+}
+
+.section-title {
+  margin: 18px 0 8px;
+  font-size: 1rem;
+  color: #d9e0ef;
 }
 
 footer {
@@ -181,4 +203,5 @@ footer {
 @media (min-width: 560px) {
   .stats { grid-template-columns: repeat(4, 1fr); }
   .actions.two { grid-template-columns: repeat(2, 1fr); }
+  .equipment-grid { grid-template-columns: repeat(2, 1fr); }
 }
