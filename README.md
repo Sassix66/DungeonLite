@@ -443,3 +443,29 @@ node tests/inventory-selection.test.mjs
 - Nach Benutzen, Ausrüsten, Verkaufen oder Zerlegen wird die Auswahl geleert,
   statt unbemerkt auf den nächsten Gegenstand zu springen.
 - Verbrauchte Heiltränke verschwinden unmittelbar aus der sichtbaren Liste.
+
+
+## Testabsicherung in v4.0.5
+
+- Automatisierte Tests für Raumabschluss und Freischaltung des
+  Etagenabstiegs.
+- Automatisierte Tests für Raum- und Etagenwechsel sowie den Schutz vor
+  Mehrfachklicks während laufender Übergänge.
+- Automatisierte Tests für Speichern/Laden, Migration älterer Spielstände
+  und den Umgang mit beschädigten Spielständen.
+- Automatisierter Test für Inventarveränderungen nach Kauf, Verkauf und
+  Zerlegen.
+
+Alle Pflichtprüfungen ausführen:
+
+```text
+node scripts/check-imports.mjs
+node tests/inventory-selection.test.mjs
+node tests/room-completion.test.mjs
+node tests/floor-transition.test.mjs
+node tests/save-load.test.mjs
+node tests/inventory-economy.test.mjs
+```
+
+Browserkonsole und Smartphone-Querformat bleiben weiterhin manuelle
+Prüfpunkte im Browser vor jeder Veröffentlichung.

@@ -1,5 +1,32 @@
 # Changelog
 
+## v4.0.5
+
+### Technisch
+- Automatisierte Tests für Raumabschluss und Freischaltung des
+  Etagenabstiegs ergänzt (`tests/room-completion.test.mjs`).
+- Automatisierte Tests für Raum- und Etagenwechsel sowie den Schutz vor
+  Mehrfachklicks während laufender Übergänge ergänzt
+  (`tests/floor-transition.test.mjs`). Dabei aufgedeckt und korrigiert:
+  `descendFloor()` verwendete das globale `setTimeout` statt konsistent
+  `window.setTimeout` wie an anderen Stellen im Code — funktional
+  gleichwertig im Browser, aber uneinheitlich; in Tests ohne echten
+  Zeitgeber ersetzt beides eine steuerbare Warteschlange.
+- Automatisierte Tests für Speichern/Laden, Migration älterer Spielstände
+  über `LEGACY_SAVE_KEYS` und den Umgang mit beschädigten Spielständen
+  ergänzt (`tests/save-load.test.mjs`).
+- Automatisierter Test für Inventarveränderungen nach Kauf, Verkauf und
+  Zerlegen ergänzt (`tests/inventory-economy.test.mjs`).
+- Gemeinsames Test-Helper-Modul `tests/helpers/test-env.mjs` für
+  Fake-localStorage und eine steuerbare Zeitgeber-Warteschlange ergänzt.
+- `dungeonlite.v404` als Legacy-Save-Key aufgenommen.
+
+### Unverändert
+- Gameplay, Balance, Inhalte und Bedienung. Browserkonsole und
+  Smartphone-Querformat bleiben wie bisher manuelle Prüfpunkte vor jeder
+  Veröffentlichung (siehe README) und sind nicht Teil dieser
+  automatisierten Tests.
+
 ## v4.0.4 (Hotfix: reset())
 
 ### Behoben
