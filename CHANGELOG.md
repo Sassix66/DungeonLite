@@ -1,5 +1,84 @@
 # Changelog
 
+## v4.0.5 (Fix: Sound- und Partikeleffekte)
+
+### Behoben
+- **Soundeffekte:** `audio.play(...)` wurde im gesamten Spiel nur an einer
+  einzigen Stelle aufgerufen (Fehlerton bei fehlendem Schlüssel), obwohl
+  `audio.js` bereits 20 vollständig fertige Soundeffekte enthielt (Angriff,
+  Gegner-/Boss-Tod, Level-Up, Ausrüsten, Verkaufen, Speichern, Falle,
+  Truhe, Vase, Schrein, Etage gesichert, neue Etage, ...) – sie waren
+  schlicht nirgendwo verdrahtet. Jetzt zentral in `playTileActionEffect()`
+  zugeordnet plus gezielte Aufrufe bei Gegenschlag, Level-Up, Etage
+  gesichert/gewechselt, Ausrüsten, Verkaufen, Heiltrank benutzen,
+  Speichern und Talentpunkt ausgeben.
+- Dabei aufgedeckt: `finishTile()` enthielt eine Schutzklausel gegen
+  doppelte Kachel-Animationen auf derselben Kachel innerhalb einer Aktion
+  (z. B. Treffer- gefolgt von Tod-Effekt). Diese hat unbeabsichtigt auch
+  den zugehörigen Sound unterdrückt. Die Schutzklausel wirkt jetzt nur
+  noch auf die visuelle Animation, der Sound spielt immer.
+- **Partikeleffekte:** `render()` hat bei jedem einzelnen Zustandswechsel
+  den kompletten Canvas-Renderer verworfen und neu aufgebaut (da der
+  Canvas über `innerHTML` neu erzeugt wird). Da Partikelsystem,
+  Schadenszahlen und Kachel-Animationen bisher direkt im Canvas-Renderer
+  lebten, wurden sie dabei sofort wieder verworfen – bevor sie je sichtbar
+  wurden. Diese drei Systeme leben jetzt dauerhaft im `Game`-Objekt und
+  werden bei jeder Neuerstellung des Renderers wiederverwendet statt neu
+  erzeugt.
+- Regressionstests ergänzt (`tests/sound-wiring.test.mjs`,
+  `tests/particle-persistence.test.mjs`).
+- `tests/inventory-selection.test.mjs` auf das gemeinsame
+  Test-Helper-Modul umgestellt (fehlender `window`-Stub kam durch die
+  neuen Soundaufrufe ans Licht) sowie `requestAnimationFrame` im
+  Test-Helper ergänzt.
+
+## v4.0.5 (Balance-Fix: Boss-Skalierung)
+
+### Behoben
+- Bosse erhielten fälschlicherweise sowohl ihren eigenen Boss-Bonus (bisher
+  +300 % HP, +60 % Angriff) als auch den "Meilenstein"-Schwierigkeits-
+  aufschlag (+20 %), der eigentlich für normale/Elite-Gegner auf jeder
+  5. Etage gedacht war. Da Bosse ausschließlich auf Meilenstein-Etagen
+  erscheinen, hat sich das bei jedem einzigen Bosskampf im Spiel
+  unbeabsichtigt aufsummiert.
+- Beispiel Etage 5 (erster Bosskampf im Spiel): HP sank von 1175 auf 539,
+  Angriff von 44 auf 31 — bei einem normalen Gegner zum Vergleich mit 62 HP
+  und 14 Angriff. Der Boss bleibt spürbar stärker (~8,7x HP eines normalen
+  Gegners statt zuvor ~19x), ist aber mit realistischer Spielerstärke auf
+  dieser Etage wieder besiegbar.
+- Boss-eigene Multiplikatoren dafür moderat angepasst: HP-Bonus von 4,00x
+  auf 2,20x, Angriffs-Bonus von 1,60x auf 1,35x, um den Wegfall des
+  doppelten Meilenstein-Bonus als reine Entschärfung wirken zu lassen statt
+  Bosse insgesamt zu schwach zu machen.
+- Regressionstest ergänzt (`tests/boss-scaling.test.mjs`).
+
+### Unverändert
+- Skalierung normaler und Elite-Gegner (erhalten den Meilenstein-Bonus
+  weiterhin wie bisher).
+
+## v4.0.5 (Versionsanzeige + Abstiegs-Button-Fix)
+
+### Behoben
+- Der Abstieg war eine feste Canvas-Kachel in der unteren rechten Ecke
+  (Spalte 7–8, Zeile 7–8). In manchen Raumvorlagen (z. B.
+  `explore-mine-collapse`) liegen Erkundungsfelder an genau dieser Position;
+  sobald der Abstieg freigeschaltet wurde, hat dessen Klick-Trefferfläche
+  Vorrang vor der darunterliegenden Kachel erhalten, wodurch diese
+  Erkundungsfelder nicht mehr anklickbar waren und der Raum nicht
+  abgeschlossen werden konnte.
+- Der Abstieg ist jetzt ein eigenständiger HTML-Button unterhalb des
+  Dungeon-Canvas (`#stairsBtn`) und blockiert dadurch grundsätzlich keine
+  Canvas-Kacheln mehr, unabhängig von der Raumvorlage.
+- Die zugehörige Canvas-Darstellung des Abstiegs (`buildExit()` in
+  `CanvasRenderer.js`) sowie die veraltete `exit`-Trefferbehandlung in
+  `RenderEngine.js` und die bereits leere `renderExitTile()` in `game.js`
+  wurden entfernt.
+
+### Neu
+- Die aktuell gestartete Spielversion wird im Topbar angezeigt (`v4.0.5`),
+  damit beim Testen eindeutig erkennbar ist, welcher Stand geladen ist.
+- Regressionstest ergänzt (`tests/version-and-descend-button.test.mjs`).
+
 ## v4.0.5 (Hotfix: fehlende equipmentSlotLabel())
 
 ### Behoben

@@ -8,7 +8,10 @@ export class RenderEngine {
     this.assetManager = new AssetManager();
     this.renderer = new CanvasRenderer({
       canvas: this.canvas,
-      getGameState: () => this.game.state
+      getGameState: () => this.game.state,
+      particles: options.particles,
+      damageNumbers: options.damageNumbers,
+      animations: options.animations
     });
     this.running = false;
     this.lastTime = performance.now();
@@ -88,11 +91,6 @@ export class RenderEngine {
     if (hit.roomId !== this.game.currentRoom?.id) return;
 
     event.preventDefault();
-
-    if (hit.type === "exit") {
-      this.game.descendFloor();
-      return;
-    }
 
     if (hit.type === "tile") {
       this.game.actOnTile(hit.tileId);

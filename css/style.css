@@ -78,6 +78,13 @@ button { font: inherit; }
   font-size: 2rem;
 }
 
+.version-tag {
+  color: var(--muted);
+  font-size: .55rem;
+  letter-spacing: .04em;
+  opacity: .65;
+}
+
 .top-center {
   display: grid;
   grid-template-columns: repeat(4, auto) 1fr;
@@ -121,6 +128,32 @@ button { font: inherit; }
 }
 
 .icon-btn.danger { background: #7d2f34; }
+
+.descend-btn {
+  margin-top: 10px;
+  padding: 12px;
+  width: 100%;
+  border: 1px solid rgba(219,184,104,.55);
+  border-radius: 10px;
+  background: #4e432c;
+  color: #f1dfb0;
+  font-weight: 800;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.descend-btn:hover:not(:disabled) {
+  background: #6b5734;
+  border-color: rgba(255,225,150,.95);
+}
+
+.descend-btn:disabled {
+  background: var(--panel-3);
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
+  font-weight: 600;
+}
 
 .main-grid {
   display: grid;

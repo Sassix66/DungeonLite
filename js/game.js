@@ -13,11 +13,15 @@ import { RuntimeContext } from "./engine/RuntimeContext.js";
 import { StatisticsSystem } from "./systems/StatisticsSystem.js";
 import { DebugPanel } from "./engine/DebugPanel.js";
 import { RenderEngine } from "./renderer/RenderEngine.js";
+import { ParticleSystem } from "./particles/ParticleSystem.js";
+import { DamageNumberSystem } from "./particles/DamageNumberSystem.js";
+import { AnimationController } from "./animation/AnimationController.js";
 import {
   GLOBAL_BALANCE,
   getZoneBalance
 } from "./config/balance.js";
 import {
+  GAME_VERSION,
   LEGACY_SAVE_KEYS,
   SAVE_KEY
 } from "./config/version.js";
@@ -45,6 +49,14 @@ export class Game {
     this.statisticsSystem.start();
     this.debugPanel = new DebugPanel(this);
     this.renderEngine = null;
+    // Bleiben über jede Neuerstellung des Canvas-Renderers hinweg
+    // bestehen (render() ersetzt den Canvas bei jedem Aufruf über
+    // innerHTML), damit gerade ausgelöste Partikel, Schadenszahlen und
+    // Kachel-Animationen nicht sofort wieder verworfen werden, bevor sie
+    // sichtbar wurden.
+    this.particles = new ParticleSystem();
+    this.damageNumbers = new DamageNumberSystem();
+    this.animations = new AnimationController();
     this.selectedItemUid = null;
     this.activeTab = "equipment";
     this.inventoryFilter = "all";
@@ -758,15 +770,19 @@ export class Game {
     const defenseScale = Math.pow(1.05, floorIndex);
     const rewardScale = Math.pow(1.05, floorIndex);
 
-    // Jede fünfte Etage erhält einen zusätzlichen Schwierigkeitsaufschlag.
+    // Jede fünfte Etage erhält einen zusätzlichen Schwierigkeitsaufschlag –
+    // gilt nicht für Bosse, da diese ausschließlich auf Meilenstein-Etagen
+    // erscheinen und bereits ihren eigenen, separaten Boss-Aufschlag
+    // erhalten. Ohne diese Ausnahme haben sich beide Boni bei jedem
+    // einzigen Bosskampf unbeabsichtigt zusätzlich vervielfacht.
     const milestoneMultiplier =
-      this.state.floor % 5 === 0 ? 1.20 : 1;
+      !boss && this.state.floor % 5 === 0 ? 1.20 : 1;
 
     const eliteHpMultiplier = elite ? 1.40 : 1;
     const eliteAttackMultiplier = elite ? 1.20 : 1;
 
-    const bossHpMultiplier = boss ? 4.00 : 1;
-    const bossAttackMultiplier = boss ? 1.60 : 1;
+    const bossHpMultiplier = boss ? 2.20 : 1;
+    const bossAttackMultiplier = boss ? 1.35 : 1;
 
     const defense = Math.max(
       1,
@@ -1116,7 +1132,10 @@ export class Game {
 
     this.renderEngine = new RenderEngine({
       game: this,
-      canvas
+      canvas,
+      particles: this.particles,
+      damageNumbers: this.damageNumbers,
+      animations: this.animations
     });
 
     this.renderEngine.start();
@@ -1156,6 +1175,7 @@ export class Game {
         <div class="level-badge box">
           <span>LEVEL</span>
           <strong>${this.player.level}</strong>
+          <small class="version-tag" title="Gestartete Spielversion">v${GAME_VERSION}</small>
         </div>
         <div class="top-center box">
           ${this.resource("💎", this.state.gems)}
@@ -1277,6 +1297,14 @@ export class Game {
             aria-label="Interaktiver Dungeonraum">
           </canvas>
         </div>
+        <button
+          class="descend-btn"
+          id="stairsBtn"
+          ${!this.state.dungeon.exitUnlocked ? "disabled" : ""}>
+          ${this.state.dungeon.exitUnlocked
+            ? "⬇ ABSTIEG ZUR NÄCHSTEN ETAGE"
+            : "Etage noch nicht gesichert"}
+        </button>
       </section>
     `;
   }
@@ -1985,6 +2013,30 @@ export class Game {
       "complete": "destroy"
     }[type] || type;
 
+    const soundName = {
+      "explore": "explore",
+      "trap": "trap",
+      "vase-hit": "vase",
+      "vase-break": "vase",
+      "object-hit": "crate",
+      "object-break": "crate",
+      "miss": "playerHit",
+      "critical": "attack",
+      "enemy-hit": "attack",
+      "boss-defeat": "bossDefeat",
+      "enemy-defeat": "enemyDefeat",
+      "treasure": "treasure",
+      "shrine": "shrine"
+    }[type];
+
+    if (soundName) this.audio.play(soundName);
+
+    // Verhindert, dass eine bereits laufende Animation auf derselben Kachel
+    // (z. B. Treffer-Effekt) durch eine unmittelbar folgende Animation
+    // (z. B. Tod-Effekt) innerhalb derselben Aktion optisch abgebrochen
+    // wird. Der Sound oben ist davon bewusst ausgenommen und spielt immer.
+    if (this.tileEffect && this.tileEffect.tileId === tile.id) return;
+
     this.renderEngine?.triggerTileEffect(
       tile,
       canvasType,
@@ -2129,6 +2181,7 @@ export class Game {
       }
 
       this.player.hp -= retaliation;
+      this.audio.play("playerHit");
 
       this.state.message =
         `${critical ? "KRITISCH! " : ""}` +
@@ -2242,24 +2295,22 @@ export class Game {
     tile.completed = true;
     this.state.message = message;
 
-    if (!this.tileEffect || this.tileEffect.tileId !== tile.id) {
-      const effectType =
-        tile.type === "boss"
-          ? "boss-defeat"
-          : tile.type === "enemy"
-            ? "enemy-defeat"
-            : tile.type === "object"
-              ? tile.object?.name === "Vase"
-                ? "vase-break"
-                : "object-break"
-              : tile.type === "treasure"
-                ? "treasure"
-                : tile.type === "shrine"
-                  ? "shrine"
-                  : "complete";
+    const effectType =
+      tile.type === "boss"
+        ? "boss-defeat"
+        : tile.type === "enemy"
+          ? "enemy-defeat"
+          : tile.type === "object"
+            ? tile.object?.name === "Vase"
+              ? "vase-break"
+              : "object-break"
+            : tile.type === "treasure"
+              ? "treasure"
+              : tile.type === "shrine"
+                ? "shrine"
+                : "complete";
 
-      this.playTileActionEffect(tile, effectType);
-    }
+    this.playTileActionEffect(tile, effectType);
 
     this.checkRoomCompletion(this.currentRoom.id);
     this.render();
@@ -2270,9 +2321,10 @@ export class Game {
     const enemies = room.tiles.filter(tile => tile.type === "enemy" || tile.type === "boss");
     room.completed = enemies.length === 0 || enemies.every(tile => tile.completed);
 
-    if (this.state.dungeon.rooms.every(room => room.completed)) {
+    if (!this.state.dungeon.exitUnlocked && this.state.dungeon.rooms.every(room => room.completed)) {
       this.state.dungeon.exitUnlocked = true;
       this.state.message = "Etage gesichert. Der Abstieg ist freigeschaltet.";
+      this.audio.play("stageComplete");
     }
   }
 
@@ -2334,12 +2386,9 @@ export class Game {
       }
       this.stageTransition = null;
       this.state.message = `${this.currentBiome().name} · Etage ${next}.`;
+      this.audio.play("stageStart");
       this.render();
     }, 1200);
-  }
-
-  renderExitTile() {
-    return "";
   }
 
   openOverlay(type) {
@@ -2550,6 +2599,7 @@ export class Game {
     this.player.inventory.splice(selected.index, 1);
     this.selectedItemUid = null;
     this.state.message = `${item.name}: +${healed} HP.`;
+    this.audio.play("potion");
     this.render();
   }
 
@@ -2568,6 +2618,7 @@ export class Game {
     this.player.inventory.splice(selected.index, 1);
     if (old) this.player.inventory.push(old);
     this.selectedItemUid = null;
+    this.audio.play("equip");
     this.render();
   }
 
@@ -2578,6 +2629,7 @@ export class Game {
     this.state.gold += item.value || 5;
     this.player.inventory.splice(selected.index, 1);
     this.selectedItemUid = null;
+    this.audio.play("sell");
     this.render();
   }
 
@@ -2628,6 +2680,7 @@ export class Game {
     } else return;
 
     this.player.talentPoints -= 1;
+    this.audio.play("talent");
     this.render();
   }
 
@@ -2638,6 +2691,8 @@ export class Game {
       this.xpDisplay.blueXp = Math.max(0, this.player.xp - amount);
     }
 
+    let leveledUp = false;
+
     while (this.player.xp >= this.player.xpNext) {
       this.player.xp -= this.player.xpNext;
       this.player.level += 1;
@@ -2645,8 +2700,10 @@ export class Game {
       this.player.xpNext = Math.round(this.player.xpNext * 1.35);
       this.xpDisplay.blueXp = 0;
       this.xpDisplay.whiteXp = this.player.xp;
+      leveledUp = true;
     }
 
+    if (leveledUp) this.audio.play("levelUp");
     if (announce) this.state.message = `+${amount} Erfahrung.`;
     this.render();
     setTimeout(() => this.animateXpCatchup(), 250);
@@ -3001,6 +3058,7 @@ export class Game {
     );
     localStorage.setItem(SAVE_KEY, JSON.stringify(this.state));
     this.state.message = "Spiel gespeichert.";
+    this.audio.play("save");
     this.render();
   }
 

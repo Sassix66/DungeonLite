@@ -25,9 +25,9 @@ export class CanvasRenderer {
       desynchronized: true
     });
     this.camera = new Camera();
-    this.animations = new AnimationController();
-    this.particles = new ParticleSystem();
-    this.damageNumbers = new DamageNumberSystem();
+    this.animations = options.animations || new AnimationController();
+    this.particles = options.particles || new ParticleSystem();
+    this.damageNumbers = options.damageNumbers || new DamageNumberSystem();
     this.lighting = new LightingSystem();
     this.layers = new Map(
       LAYERS.map(([name, zIndex]) => [
@@ -83,7 +83,6 @@ export class CanvasRenderer {
     this.buildWalls(room, frameState);
     this.buildDecorations(room, frameState);
     this.buildTiles(room, frameState);
-    this.buildExit(room, frameState);
     this.particles.update(frameState.deltaTime || 16);
     this.damageNumbers.update(frameState.deltaTime || 16);
 
@@ -725,77 +724,6 @@ export class CanvasRenderer {
 
     ctx.fillStyle = "#6d7276";
     ctx.fillRect(-size * .30, -size * .18, size * .60, size * .38);
-  }
-
-  buildExit(room, frameState) {
-    const state = this.getGameState();
-
-    if (!state?.dungeon?.exitUnlocked) return;
-
-    const grid = {
-      column: 7,
-      row: 7,
-      width: 2,
-      height: 2
-    };
-    const rect = this.cellRect(grid);
-    const hovered = this.hoveredHit?.type === "exit";
-
-    this.hitRegions.push({
-      type: "exit",
-      roomId: room.id,
-      rect
-    });
-
-    this.layers.get("objects").add((ctx) => {
-      ctx.save();
-
-      ctx.fillStyle = hovered ? "#6b5734" : "#4e432c";
-      ctx.strokeStyle = hovered
-        ? "rgba(255,225,150,.95)"
-        : "rgba(219,184,104,.55)";
-      ctx.lineWidth = hovered ? 3 : 1;
-
-      this.roundRect(
-        ctx,
-        rect.x,
-        rect.y,
-        rect.width,
-        rect.height,
-        8
-      );
-      ctx.fill();
-      ctx.stroke();
-
-      const stepCount = 5;
-      const stepWidth = rect.width * .56;
-      const stepHeight = rect.height * .08;
-
-      ctx.fillStyle = "#b9a06a";
-
-      for (let index = 0; index < stepCount; index += 1) {
-        const scale = 1 - index * .08;
-        ctx.fillRect(
-          rect.x + rect.width * .22 + index * rect.width * .025,
-          rect.y + rect.height * .24 + index * rect.height * .12,
-          stepWidth * scale,
-          stepHeight
-        );
-      }
-
-      ctx.fillStyle = "#f1dfb0";
-      ctx.font = `800 ${Math.max(10, rect.width * .08)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(
-        "ABSTIEG",
-        rect.x + rect.width / 2,
-        rect.y + rect.height - 8
-      );
-
-      ctx.restore();
-      this.drawCalls += 8;
-    });
   }
 
   drawEnemyHealth(ctx, enemy, rect) {

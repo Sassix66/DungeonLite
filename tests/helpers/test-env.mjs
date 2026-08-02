@@ -30,6 +30,12 @@ export function installTestGlobals() {
   globalThis.setTimeout = fakeSetTimeout;
   globalThis.window = { setTimeout: fakeSetTimeout };
 
+  // Rein visuelle Animationsschleifen (z. B. der XP-Balken-Nachzieheffekt)
+  // rufen requestAnimationFrame auf, sobald ihr setTimeout geflusht wird.
+  // Für Tests reicht ein No-Op – die Animation selbst ist nicht Teil der
+  // geprüften Logik.
+  globalThis.requestAnimationFrame = () => 0;
+
   function flushTimers() {
     while (pendingTimers.length > 0) {
       const callback = pendingTimers.shift();

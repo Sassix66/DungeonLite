@@ -466,6 +466,10 @@ node tests/floor-transition.test.mjs
 node tests/save-load.test.mjs
 node tests/inventory-economy.test.mjs
 node tests/equipment-selection-render.test.mjs
+node tests/version-and-descend-button.test.mjs
+node tests/boss-scaling.test.mjs
+node tests/particle-persistence.test.mjs
+node tests/sound-wiring.test.mjs
 ```
 
 Browserkonsole und Smartphone-Querformat bleiben weiterhin manuelle
