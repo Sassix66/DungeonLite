@@ -1,7 +1,7 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 import { AudioManager } from "./audio.js";
 
-const SAVE_KEY = "dungeonlite.v105";
+const SAVE_KEY = "dungeonlite.v11";
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
 const PLAYER_REGEN_DELAY = 5000;
@@ -22,9 +22,26 @@ export class Game {
   }
 
   start() {
-    if (this.state.currentRoomId === null || this.state.currentRoomId === undefined) {
+    if (
+      this.state.currentRoomId === null ||
+      this.state.currentRoomId === undefined
+    ) {
       this.state.currentRoomId = 0;
     }
+
+    const room = this.currentRoom;
+    const requiredEnemies = room.tiles.filter(
+      tile => tile.type === "enemy" || tile.type === "boss"
+    );
+
+    if (
+      requiredEnemies.length === 0 ||
+      requiredEnemies.every(tile => tile.completed)
+    ) {
+      room.completed = true;
+    }
+    room.revealed = true;
+    this.revealAdjacentRooms(this.state.dungeon.rooms, room.id);
 
     this.render();
     requestAnimationFrame(this.loop);
@@ -75,7 +92,14 @@ export class Game {
 
   createDungeon() {
     const floor = this.state?.floor || 1;
-    const roomCount = Math.min(12, 4 + Math.floor((floor - 1) / 2));
+
+    // Mit fortschreitender Etage werden größere Karten wahrscheinlicher.
+    const minimumRooms = 4 + Math.floor((floor - 1) / 3);
+    const randomBonus = Math.floor(
+      Math.random() * Math.min(6, 2 + Math.floor(floor / 2))
+    );
+    const roomCount = Math.max(4, Math.min(15, minimumRooms + randomBonus));
+
     const positions = [{ x: 0, y: 0 }];
     const used = new Set(["0,0"]);
     const directions = [
@@ -87,7 +111,8 @@ export class Game {
 
     while (positions.length < roomCount) {
       const origin = positions[Math.floor(Math.random() * positions.length)];
-      const direction = directions[Math.floor(Math.random() * directions.length)];
+      const direction =
+        directions[Math.floor(Math.random() * directions.length)];
       const candidate = {
         x: origin.x + direction.dx,
         y: origin.y + direction.dy
@@ -100,16 +125,36 @@ export class Game {
       }
     }
 
-    const rooms = positions.map((position, index) => ({
-      id: index,
-      x: position.x,
-      y: position.y,
-      visited: index === 0,
-      completed: false,
-      type: index === 0 ? "start" : this.randomRoomType(floor),
-      neighbors: {},
-      tiles: []
-    }));
+    const farthestIndex = positions.reduce((bestIndex, position, index) => {
+      const distance = Math.abs(position.x) + Math.abs(position.y);
+      const best = positions[bestIndex];
+      const bestDistance = Math.abs(best.x) + Math.abs(best.y);
+      return distance > bestDistance ? index : bestIndex;
+    }, 0);
+
+    const rooms = positions.map((position, index) => {
+      let type = "normal";
+
+      if (index === 0) {
+        type = "start";
+      } else if (index === farthestIndex) {
+        type = floor % 3 === 0 ? "boss" : "elite";
+      } else {
+        type = this.randomRoomType(floor);
+      }
+
+      return {
+        id: index,
+        x: position.x,
+        y: position.y,
+        visited: index === 0,
+        revealed: index === 0,
+        completed: false,
+        type,
+        neighbors: {},
+        tiles: []
+      };
+    });
 
     const byPosition = new Map(
       rooms.map(room => [`${room.x},${room.y}`, room.id])
@@ -136,6 +181,9 @@ export class Game {
       room.tiles = this.createRoomTiles(room.type);
     }
 
+    // Direkt angrenzende Räume sind auf der Karte erkennbar.
+    this.revealAdjacentRooms(rooms, 0);
+
     return {
       rooms,
       exitUnlocked: false
@@ -145,27 +193,40 @@ export class Game {
   randomRoomType(floor) {
     const roll = Math.random();
 
-    if (floor >= 3 && roll < 0.08) return "boss";
-    if (roll < 0.38) return "explore";
-    if (roll < 0.68) return "enemy";
-    if (roll < 0.83) return "object";
-    if (roll < 0.92) return "shrine";
-    return "trap";
+    // Spezialräume bleiben wertvoll und relativ selten.
+    if (floor >= 4 && roll < 0.07) return "elite";
+    if (roll < 0.50) return "normal";
+    if (roll < 0.68) return "explore";
+    if (roll < 0.78) return "treasure";
+    if (roll < 0.86) return "event";
+    if (roll < 0.92) return "fountain";
+    if (roll < 0.97) return "merchant";
+    return "shrine";
   }
 
   createRoomTiles(roomType) {
+    // Normale Räume besitzen immer mindestens einen Gegner. Andere Inhalte
+    // sind optional und blockieren den Raumabschluss nicht.
     const templates = {
-      start: ["explore", "explore", "object"],
-      explore: ["explore", "explore", "object", "enemy"],
-      enemy: ["enemy", "enemy", "object", "explore"],
-      object: ["object", "object", "explore", "trap"],
-      shrine: ["shrine", "explore", "object"],
-      trap: ["trap", "explore", "object", "enemy"],
-      boss: ["boss", "enemy", "object", "shrine"]
+      start: ["enemy", "explore", "object"],
+      normal: ["enemy", "explore", "object"],
+      explore: ["enemy", "explore", "explore", "object"],
+      elite: ["elite", "object", "treasure"],
+      boss: ["boss", "object", "treasure"],
+      treasure: ["enemy", "treasure", "object", "object"],
+      event: ["enemy", "explore", "trap"],
+      fountain: ["enemy", "fountain", "object"],
+      merchant: ["enemy", "merchant", "object"],
+      shrine: ["enemy", "shrine", "explore"]
     };
 
-    const source = templates[roomType] || templates.explore;
-    const count = Math.min(10, source.length + Math.floor(Math.random() * 3));
+    const source = templates[roomType] || templates.normal;
+    const extraTiles = Math.min(
+      4,
+      Math.floor((this.state.floor - 1) / 4) +
+      (Math.random() < 0.45 ? 1 : 0)
+    );
+    const count = Math.min(10, source.length + extraTiles);
 
     return Array.from({ length: count }, (_, id) => {
       const type = source[id % source.length];
@@ -180,6 +241,10 @@ export class Game {
       };
 
       if (type === "enemy") tile.enemy = this.makeEnemy(false);
+      if (type === "elite") {
+        tile.type = "enemy";
+        tile.enemy = this.makeEnemy(false, true);
+      }
       if (type === "boss") tile.enemy = this.makeEnemy(true);
 
       if (type === "object") {
@@ -197,7 +262,19 @@ export class Game {
     });
   }
 
-  makeEnemy(boss) {
+  revealAdjacentRooms(rooms = this.state.dungeon.rooms, roomId) {
+    const room = rooms.find(candidate => candidate.id === roomId);
+    if (!room) return;
+
+    room.revealed = true;
+
+    for (const neighborId of Object.values(room.neighbors || {})) {
+      const neighbor = rooms.find(candidate => candidate.id === neighborId);
+      if (neighbor) neighbor.revealed = true;
+    }
+  }
+
+  makeEnemy(boss, elite = false) {
     const floor = this.state?.floor || 1;
     const pool = boss ? BOSSES : ENEMIES;
     const tier = Math.min(pool.length - 1, Math.floor((floor - 1) / 5));
@@ -208,10 +285,14 @@ export class Game {
     );
     const targetClicks = boss
       ? 9 + Math.floor(floor / 4)
-      : 4 + Math.floor(floor / 5);
+      : elite
+        ? 7 + Math.floor(floor / 5)
+        : 4 + Math.floor(floor / 6);
     const expectedDamage = Math.max(1, this.attack - defense * 0.55);
     const hp = Math.max(base.hp, Math.round(expectedDamage * targetClicks));
-    const desiredDamage = this.player.maxHp * (boss ? 0.115 : 0.085);
+    const desiredDamage = this.player.maxHp * (
+      boss ? 0.115 : elite ? 0.10 : 0.075
+    );
     const attack = Math.max(
       base.attack,
       Math.round(desiredDamage + this.defense * 0.55)
@@ -223,8 +304,17 @@ export class Game {
       maxHp: hp,
       attack,
       defense,
-      reward: Math.round(base.reward * (1 + (floor - 1) * 0.11)),
-      xp: Math.round(base.xp * (1 + (floor - 1) * 0.13))
+      reward: Math.round(
+        base.reward *
+        (1 + (floor - 1) * 0.11) *
+        (boss ? 2.2 : elite ? 1.6 : 1)
+      ),
+      xp: Math.round(
+        base.xp *
+        (1 + (floor - 1) * 0.13) *
+        (boss ? 2.2 : elite ? 1.6 : 1)
+      ),
+      elite
     };
   }
 
@@ -363,7 +453,10 @@ export class Game {
           ${this.resource("🗝️", this.state.silverKeys)}
           ${this.resource("🔑", this.state.goldKeys)}
           <div class="stage-title">
-            ETAGE ${this.state.floor} · RAUM ${this.currentRoom.id + 1}
+            ETAGE ${this.state.floor} ·
+            ${this.roomTypeInfo(this.currentRoom.type).icon}
+            ${this.roomTypeInfo(this.currentRoom.type).label.toUpperCase()}
+            · RAUM ${this.currentRoom.id + 1}
           </div>
         </div>
 
@@ -433,45 +526,98 @@ export class Game {
 
   renderDungeonMap() {
     const rooms = this.state.dungeon.rooms;
-    const minX = Math.min(...rooms.map(room => room.x));
-    const maxX = Math.max(...rooms.map(room => room.x));
-    const minY = Math.min(...rooms.map(room => room.y));
-    const maxY = Math.max(...rooms.map(room => room.y));
-    const width = maxX - minX + 1;
-    const cells = [];
+    const visibleRooms = rooms.filter(room => room.revealed || room.visited);
+    const minX = Math.min(...visibleRooms.map(room => room.x));
+    const maxX = Math.max(...visibleRooms.map(room => room.x));
+    const minY = Math.min(...visibleRooms.map(room => room.y));
+    const maxY = Math.max(...visibleRooms.map(room => room.y));
+    const gridWidth = (maxX - minX + 1) * 2 - 1;
+    const gridHeight = (maxY - minY + 1) * 2 - 1;
+    const cells = Array.from(
+      { length: gridWidth * gridHeight },
+      () => `<div class="map-space"></div>`
+    );
 
-    for (let y = minY; y <= maxY; y += 1) {
-      for (let x = minX; x <= maxX; x += 1) {
-        const room = rooms.find(candidate => candidate.x === x && candidate.y === y);
+    const setCell = (x, y, html) => {
+      const index = y * gridWidth + x;
+      if (index >= 0 && index < cells.length) cells[index] = html;
+    };
 
-        if (!room) {
-          cells.push(`<div class="map-room empty"></div>`);
-          continue;
+    for (const room of visibleRooms) {
+      const gx = (room.x - minX) * 2;
+      const gy = (room.y - minY) * 2;
+      const classes = ["map-room"];
+
+      if (room.visited) classes.push("visited");
+      if (room.completed) classes.push("completed");
+      if (room.id === this.currentRoom.id) classes.push("current");
+      if (!room.visited) classes.push("unvisited");
+
+      const icon = this.roomTypeInfo(room.type).icon;
+      const disabled =
+        room.id === this.currentRoom.id ||
+        this.player.defeated ||
+        !room.revealed;
+
+      setCell(gx, gy, `
+        <button
+          type="button"
+          class="${classes.join(" ")}"
+          data-map-room="${room.id}"
+          title="${this.escape(this.roomTypeInfo(room.type).label)} · Raum ${room.id + 1}"
+          ${disabled ? "disabled" : ""}>
+          ${room.id === this.currentRoom.id ? "●" : room.completed ? "✓" : icon}
+        </button>
+      `);
+
+      if (room.neighbors.right !== undefined) {
+        const target = rooms.find(item => item.id === room.neighbors.right);
+        if (target?.revealed) {
+          setCell(gx + 1, gy, `<div class="map-corridor horizontal"></div>`);
         }
+      }
 
-        const classes = ["map-room"];
-        if (room.visited) classes.push("visited");
-        if (room.completed) classes.push("completed");
-        if (room.id === this.currentRoom.id) classes.push("current");
-
-        cells.push(`
-          <button
-            type="button"
-            class="${classes.join(" ")}"
-            data-map-room="${room.id}"
-            title="Raum ${room.id + 1}"
-            ${room.id === this.currentRoom.id ? "disabled" : ""}>
-            ${room.id === this.currentRoom.id ? "●" : room.completed ? "✓" : ""}
-          </button>
-        `);
+      if (room.neighbors.down !== undefined) {
+        const target = rooms.find(item => item.id === room.neighbors.down);
+        if (target?.revealed) {
+          setCell(gx, gy + 1, `<div class="map-corridor vertical"></div>`);
+        }
       }
     }
 
     return `
-      <div class="zelda-map" style="grid-template-columns:repeat(${width}, 24px)">
+      <div
+        class="zelda-map connected-map"
+        style="
+          grid-template-columns:repeat(${gridWidth}, 24px);
+          grid-template-rows:repeat(${gridHeight}, 24px);
+        ">
         ${cells.join("")}
       </div>
+      <div class="map-room-key">
+        ${["normal", "elite", "treasure", "merchant", "fountain", "shrine", "boss"]
+          .map(type => {
+            const info = this.roomTypeInfo(type);
+            return `<span>${info.icon} ${info.label}</span>`;
+          })
+          .join("")}
+      </div>
     `;
+  }
+
+  roomTypeInfo(type) {
+    return {
+      start: { icon: "◆", label: "Start" },
+      normal: { icon: "⚔", label: "Kampf" },
+      explore: { icon: "?", label: "Erkundung" },
+      elite: { icon: "★", label: "Elite" },
+      boss: { icon: "☠", label: "Boss" },
+      treasure: { icon: "▣", label: "Schatz" },
+      merchant: { icon: "¤", label: "Händler" },
+      fountain: { icon: "◉", label: "Brunnen" },
+      shrine: { icon: "✦", label: "Heiligtum" },
+      event: { icon: "!", label: "Ereignis" }
+    }[type] || { icon: "·", label: "Raum" };
   }
 
   renderCenter() {
@@ -503,6 +649,7 @@ export class Game {
           <span><i style="background:#5c4c1c"></i>Aktueller Raum</span>
           <span><i style="background:#294b35"></i>Abgeschlossener Raum</span>
           <span><i style="background:#a77e39"></i>Treppe</span>
+          <span><i style="background:#6b7280"></i>Nur Gegner sind verpflichtend</span>
         </div>
       </section>
     `;
@@ -643,12 +790,14 @@ export class Game {
     const info = {
       shrine: ["HEILIGTUM", "HP regenerieren", "🏛️"],
       treasure: ["SCHATZTRUHE", "Öffnen", "🧰"],
-      trap: ["FALLE", "Gefährlich", "⚠️"],
+      trap: ["FALLE", "Optional · Gefährlich", "⚠️"],
+      fountain: ["BRUNNEN", "HP und AP auffüllen", "⛲"],
+      merchant: ["HÄNDLER", "Spezialraum", "🛒"],
       empty: ["LEER", "Abschließen", "·"]
     }[tile.type] || ["LEER", "", ""];
 
     return `
-      <button type="button" class="tile ${tile.type}" data-tile="${tile.id}" ${this.player.defeated ? "disabled" : ""}>
+      <button type="button" class="tile ${tile.type} ${tile.type === "trap" ? "optional-tile" : ""}" data-tile="${tile.id}" ${this.player.defeated ? "disabled" : ""}>
         <span class="tile-title">${info[0]}</span>
         <span class="tile-sub">${info[1]}</span>
         <span class="tile-icon">${info[2]}</span>
@@ -727,7 +876,6 @@ export class Game {
     if (tile.type === "object") return this.attackObject(tile);
 
     if (tile.type === "shrine") {
-      if (!this.spendAp(4)) return;
       this.audio.play("shrine");
       const heal = Math.min(25, this.player.maxHp - this.player.hp);
       this.player.hp += heal;
@@ -736,7 +884,6 @@ export class Game {
     }
 
     if (tile.type === "treasure") {
-      if (!this.spendAp(4)) return;
       this.audio.play("treasure");
 
       if (Math.random() < 0.5) {
@@ -753,7 +900,6 @@ export class Game {
     }
 
     if (tile.type === "trap") {
-      if (!this.spendAp(4)) return;
       this.audio.play("trap");
       const damage = 8 + this.state.floor * 2;
       this.player.hp -= damage;
@@ -767,8 +913,20 @@ export class Game {
       return;
     }
 
+    if (tile.type === "fountain") {
+      this.audio.play("shrine");
+      this.player.hp = this.player.maxHp;
+      this.player.ap = this.player.maxAp;
+      this.finishTile(tile, "Der Brunnen stellt HP und AP vollständig wieder her.");
+      return;
+    }
+
+    if (tile.type === "merchant") {
+      this.finishTile(tile, "Der Händlerraum ist gesichert. Der vollständige Handel folgt in v1.2.");
+      return;
+    }
+
     if (tile.type === "empty") {
-      if (!this.spendAp(4)) return;
       this.finishTile(tile, "Leeres Feld abgeschlossen.");
     }
   }
@@ -854,7 +1012,6 @@ export class Game {
 
   attackObject(tile) {
     if (!tile.object || tile.object.hp <= 0) return;
-    if (!this.spendAp(4)) return;
 
     const damage = Math.max(1, this.attack);
     this.audio.play(tile.object.name === "Vase" ? "vase" : "crate");
@@ -905,9 +1062,12 @@ export class Game {
 
     if (!room) return;
 
+    const requiredEnemies = room.tiles.filter(
+      tile => tile.type === "enemy" || tile.type === "boss"
+    );
     const complete =
-      room.tiles.length > 0 &&
-      room.tiles.every(tile => tile.completed);
+      requiredEnemies.length === 0 ||
+      requiredEnemies.every(tile => tile.completed);
 
     if (!complete) {
       this.render();
@@ -917,13 +1077,16 @@ export class Game {
     room.completed = true;
 
     if (this.currentRoom.id === room.id) {
-      this.state.message = `Raum ${room.id + 1} abgeschlossen.`;
+      this.state.message =
+        requiredEnemies.length === 0
+          ? `Raum ${room.id + 1} enthält keine Gegner und gilt als gesichert.`
+          : `Raum ${room.id + 1} gesichert. Alle Gegner wurden besiegt.`;
     }
 
     if (this.state.dungeon.rooms.every(item => item.completed)) {
       this.state.dungeon.exitUnlocked = true;
       this.state.message =
-        "Alle Räume abgeschlossen. Die Treppe ist freigeschaltet.";
+        "Alle Räume gesichert. Die Treppe ist freigeschaltet.";
     }
 
     this.render();
@@ -936,15 +1099,20 @@ export class Game {
     if (!target) return;
 
     target.visited = true;
+    target.revealed = true;
+    this.revealAdjacentRooms(this.state.dungeon.rooms, roomId);
     this.state.currentRoomId = roomId;
 
+    const requiredEnemies = target.tiles.filter(
+      tile => tile.type === "enemy" || tile.type === "boss"
+    );
     const alreadyComplete =
-      target.tiles.length > 0 &&
-      target.tiles.every(tile => tile.completed);
+      requiredEnemies.length === 0 ||
+      requiredEnemies.every(tile => tile.completed);
 
     if (alreadyComplete) {
       target.completed = true;
-      this.state.message = `Raum ${target.id + 1} ist bereits abgeschlossen.`;
+      this.state.message = `Raum ${target.id + 1} ist bereits gesichert.`;
 
       if (this.state.dungeon.rooms.every(item => item.completed)) {
         this.state.dungeon.exitUnlocked = true;
@@ -1042,14 +1210,25 @@ export class Game {
     const apBar = document.getElementById("apBar");
     const hpBar = document.getElementById("hpBar");
 
+    const apValue = document.querySelector('[data-stat-value="apBar"]');
+    const hpValue = document.querySelector('[data-stat-value="hpBar"]');
+
     if (apBar) {
       apBar.style.width = `${this.player.ap / this.player.maxAp * 100}%`;
-      apBar.textContent = `${Math.floor(this.player.ap)}/${this.player.maxAp}`;
+    }
+
+    if (apValue) {
+      apValue.textContent =
+        `${Math.floor(this.player.ap)}/${this.player.maxAp}`;
     }
 
     if (hpBar) {
       hpBar.style.width = `${this.player.hp / this.player.maxHp * 100}%`;
-      hpBar.textContent = `${Math.floor(this.player.hp)}/${this.player.maxHp}`;
+    }
+
+    if (hpValue) {
+      hpValue.textContent =
+        `${Math.floor(this.player.hp)}/${this.player.maxHp}`;
     }
   }
 
@@ -1262,7 +1441,8 @@ export class Game {
           <div>
             <div class="stat-name">${name}</div>
             <div class="stat-bar">
-              <div id="${id}" class="stat-fill ${fillClass}" style="width:${percentage}%">
+              <div id="${id}" class="stat-fill ${fillClass}" style="width:${percentage}%"></div>
+              <div class="stat-value" data-stat-value="${id}">
                 ${name === "HP" || name === "AP"
                   ? `${Math.floor(value)}/${max}`
                   : Math.floor(value)}
@@ -1313,7 +1493,7 @@ export class Game {
 
   reset() {
     const keys = [
-      "dungeonlite.v102", "dungeonlite.v105", "dungeonlite.v104", "dungeonlite.v103", "dungeonlite.v102", "dungeonlite.v101", "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
+      "dungeonlite.v102", "dungeonlite.v11", "dungeonlite.v107", "dungeonlite.v106", "dungeonlite.v105", "dungeonlite.v104", "dungeonlite.v103", "dungeonlite.v102", "dungeonlite.v101", "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
       "dungeonlite.v07", "dungeonlite.v06", "dungeonlite.v054",
       "dungeonlite.v053", "dungeonlite.v052", "dungeonlite.v05"
     ];

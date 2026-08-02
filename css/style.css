@@ -969,3 +969,105 @@ button.map-room:disabled {
 .map-room.empty {
   pointer-events: none;
 }
+
+
+.tile.optional-tile {
+  border-style: dashed;
+}
+
+.tile.optional-tile .tile-sub {
+  color: #f0d6a8;
+}
+
+
+.stat-bar {
+  position: relative;
+}
+
+.stat-value {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  color: #111;
+  font-size: .75rem;
+  font-weight: 900;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.stat-fill {
+  position: relative;
+  z-index: 1;
+}
+
+
+.connected-map {
+  align-items: center;
+  justify-items: center;
+}
+
+.map-space {
+  width: 24px;
+  height: 24px;
+}
+
+.map-corridor {
+  background: #59667b;
+  border-radius: 999px;
+  opacity: .9;
+}
+
+.map-corridor.horizontal {
+  width: 24px;
+  height: 5px;
+}
+
+.map-corridor.vertical {
+  width: 5px;
+  height: 24px;
+}
+
+.map-room.unvisited {
+  color: #b7c0ce;
+  background: #171f2d;
+  border-color: #536077;
+}
+
+.map-room.current {
+  animation: map-current-pulse 1.45s ease-in-out infinite;
+}
+
+.map-room-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px 9px;
+  margin-top: 9px;
+  color: #9faabd;
+  font-size: .66rem;
+}
+
+.map-room-key span {
+  white-space: nowrap;
+}
+
+@keyframes map-current-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(240,207,85,0);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(240,207,85,.55);
+    transform: scale(1.08);
+  }
+}
+
+.tile.fountain {
+  background: #367c91;
+}
+
+.tile.merchant {
+  background: #81623d;
+}
