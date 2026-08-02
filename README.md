@@ -261,3 +261,92 @@ Auf jeder fünften Etage erhalten Gegner zusätzlich 20 % auf HP, Angriff und Ve
 - Diese ist bei voller Gesundheit vollständig gefüllt, unabhängig von den maximalen HP.
 - Nur Elite- und Bossgegner besitzen mehrere übereinanderliegende 100-HP-Leisten.
 - Die zusätzliche Textanzeige der Leistenanzahl wurde entfernt.
+
+
+## Loot-Overhaul in v2.4
+
+- Stark vergrößerter Gegenstandspool mit mehreren Varianten pro Slot.
+- Waffenfamilien: Schwert, Dolch, schwere Waffe, Fernkampf und Magie.
+- Waffen speichern ihren Typ und verwenden zuverlässig ihre Trefferchance.
+- Deutlich mehr Präfixe und Suffixe.
+- Verbesserte Seltenheitschancen für Boss-, Elite- und Schatzbeute.
+- Inventarfilter für Ausrüstung, Waffen, Rüstung, Schmuck und Tränke.
+- Sortierung nach Power, Seltenheit, Wert oder Name.
+- Itemlevel, Item-Power und Seltenheitsrahmen direkt im Inventar.
+- Vergleichsansicht mit Power-Differenz, Waffentyp und Affixen.
+- Händler führen drei Ausrüstungsangebote.
+- Große Heiltränke werden ab höheren Etagen verfügbar.
+- Beschädigte Kampfmethoden aus v2.3 wurden repariert.
+
+
+## Dungeon Generator 2.0 in v2.5
+
+- Räume werden jetzt aus festen 8×8-Vorlagen erzeugt.
+- Gegner, Elitegegner, Bosse, Vasen, Truhen, Brunnen, Heiligtümer und Händler stehen an bewusst gestalteten Positionen.
+- Zusätzliche Gegner und Objekte werden mit steigender Etage ergänzt.
+- Jeder Raum speichert seine verwendete Vorlagen-ID.
+- Dekoration liegt auf einer getrennten, nicht anklickbaren Ebene.
+- Dekoration beeinflusst Kampf und Raumabschluss nicht.
+
+## Raumkategorien
+
+- Start
+- Normal
+- Erkundung
+- Schatzkammer
+- Elite
+- Boss
+- Händler
+- Brunnen
+- Heiligtum
+- Ereignis
+
+Jede Kategorie besitzt mehrere eigene Vorlagen.
+
+## Biomdekoration
+
+- Mine: Felsen, Werkzeuge, Spinnweben und Kristalle
+- Krypta: Grabsteine, Knochen, Kerzen und Urnen
+- Wald: Pilze, Wurzeln, Holz und Spinnweben
+- Festung: Mauerwerk, Fässer, Waffen und Fackeln
+- Eis: Eisblöcke, Schnee, Kristalle und Felsen
+- Vulkan: Lava, Feuer, Basalt und Magmakristalle
+
+## Atmosphäre
+
+- Biomabhängige Bodenfarben
+- animierte Fackeln, Kerzen und Lava
+- dezent schwebende Dekoration
+- besondere Lichtstimmung für Boss-, Schatz- und Heiligtumräume
+- weicher Übergang beim Raumwechsel
+
+Das einfache Kampfsystem bleibt unverändert.
+
+
+## Engine-Architektur 3.0.1
+
+Diese Version legt das technische Fundament für die weitere Entwicklung.
+
+### Neu
+
+- EventBus für lose gekoppelte Systeme
+- Registries für:
+  - Zonen
+  - Gegner
+  - Bosse
+  - Items
+  - Raumvorlagen
+- deterministischer Seed-Manager
+- reproduzierbare Zufallsfolgen
+- zentrale globale Balance-Konfiguration
+- zonenspezifische Balancewerte
+- ereignisgesteuertes Statistiksystem
+- strukturierte Engine-, Core-, Systems- und Config-Ordner
+- Architektur-Dokumentation
+- Debug-Menü mit `F2`
+
+### Wichtig
+
+Das eigentliche Gameplay wurde bewusst nicht verändert. Kampf, Loot,
+Dungeonkarte, Meditation, Inventar und Raumvorlagen funktionieren weiterhin
+wie in Version 2.5.

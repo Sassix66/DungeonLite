@@ -4,28 +4,49 @@ import {
   PREFIXES,
   SUFFIXES,
   RARITIES,
-  QUEST_TEMPLATES
+  QUEST_TEMPLATES,
+  ROOM_TEMPLATES,
+  BIOME_DECORATIONS
 } from "./data.js";
 import { AudioManager } from "./audio.js";
+import { RuntimeContext } from "./engine/RuntimeContext.js";
+import { StatisticsSystem } from "./systems/StatisticsSystem.js";
+import { DebugPanel } from "./engine/DebugPanel.js";
+import {
+  GLOBAL_BALANCE,
+  getZoneBalance
+} from "./config/balance.js";
 
-const SAVE_KEY = "dungeonlite.v23";
-const ACTION_AP_COST = 4;
-const ENEMY_REGEN_DELAY = 1800;
-const ENEMY_REGEN_PER_SECOND = 4;
-const PLAYER_REGEN_DELAY = 5000;
+const SAVE_KEY = "dungeonlite.v301";
+const ACTION_AP_COST = GLOBAL_BALANCE.actionApCost;
+const ENEMY_REGEN_DELAY = GLOBAL_BALANCE.enemyRegenDelayMs;
+const ENEMY_REGEN_PER_SECOND = GLOBAL_BALANCE.enemyRegenPerSecond;
+const PLAYER_REGEN_DELAY = GLOBAL_BALANCE.playerRegenDelayMs;
 const DEFEAT_REGEN_MULTIPLIER = 6;
 const DEFEAT_REGEN_BONUS = 4;
-const DEFEAT_PENALTY_DURATION = 180000;
-const DEFEAT_ATTACK_MULTIPLIER = 0.70;
-const DEFEAT_DEFENSE_MULTIPLIER = 0.70;
+const DEFEAT_PENALTY_DURATION = GLOBAL_BALANCE.defeatPenaltyDurationMs;
+const DEFEAT_ATTACK_MULTIPLIER = GLOBAL_BALANCE.defeatAttackMultiplier;
+const DEFEAT_DEFENSE_MULTIPLIER = GLOBAL_BALANCE.defeatDefenseMultiplier;
 
 export class Game {
   constructor(root) {
     this.root = root;
     this.audio = new AudioManager();
+    this.context = new RuntimeContext({
+      seed: localStorage.getItem("dungeonlite.seed") || Date.now()
+    });
+    this.statisticsSystem = new StatisticsSystem(
+      this.context,
+      () => this.state
+    );
+    this.statisticsSystem.start();
+    this.debugPanel = new DebugPanel(this);
     this.selectedItem = 0;
     this.activeTab = "equipment";
+    this.inventoryFilter = "all";
+    this.inventorySort = "power-desc";
     this.activeOverlay = null;
+    this.activeRoomTransition = null;
     this.tileEffect = null;
     this.combatFloater = null;
     this.stageTransition = null;
@@ -38,6 +59,8 @@ export class Game {
   createState() {
     const state = {
       floor: 1,
+      seed: this.context.seed.seed,
+      rngState: this.context.snapshot(),
       gold: 0,
       gems: 0,
       silverKeys: 0,
@@ -107,11 +130,21 @@ export class Game {
 
   start() {
     this.ensureStateShape();
+
+    if (this.state.rngState) {
+      this.context.restore(this.state.rngState);
+    } else if (this.state.seed) {
+      this.context.seed.setSeed(this.state.seed);
+    }
+
     this.render();
     requestAnimationFrame(this.loop);
   }
 
   ensureStateShape() {
+    this.state.seed ??= this.context.seed.seed;
+    this.state.rngState ??= this.context.snapshot();
+
     const p = this.state.player;
     p.critChance ??= 5;
     p.talentPoints ??= 0;
@@ -154,6 +187,26 @@ export class Game {
     };
   }
 
+  random() {
+    return this.context.random();
+  }
+
+  pick(values) {
+    return this.context.pick(values);
+  }
+
+  integer(min, max) {
+    return this.context.integer(min, max);
+  }
+
+  chance(percent) {
+    return this.context.chance(percent);
+  }
+
+  currentZoneBalance() {
+    return getZoneBalance(this.currentBiome().id);
+  }
+
   currentBiome() {
     return BIOMES.find(
       biome => this.state.floor >= biome.floorFrom &&
@@ -175,8 +228,8 @@ export class Game {
     ];
 
     while (positions.length < roomCount) {
-      const origin = positions[Math.floor(Math.random() * positions.length)];
-      const direction = directions[Math.floor(Math.random() * directions.length)];
+      const origin = positions[Math.floor(this.random() * positions.length)];
+      const direction = directions[Math.floor(this.random() * directions.length)];
       const candidate = {
         x: origin.x + direction.dx,
         y: origin.y + direction.dy
@@ -233,6 +286,8 @@ export class Game {
       }
 
       room.tiles = this.createRoomTiles(room.type);
+      room.templateId = room.tiles.templateId || "unknown";
+      room.decorations = room.tiles.decorations || [];
     }
 
     this.revealAdjacentRooms(rooms, 0);
@@ -240,7 +295,7 @@ export class Game {
   }
 
   randomRoomType() {
-    const roll = Math.random();
+    const roll = this.random();
     if (roll < 0.52) return "normal";
     if (roll < 0.70) return "explore";
     if (roll < 0.80) return "treasure";
@@ -251,47 +306,36 @@ export class Game {
   }
 
   createRoomTiles(roomType) {
-    const templates = {
-      start: ["enemy", "explore", "object"],
-      normal: ["enemy", "explore", "object"],
-      explore: ["enemy", "explore", "explore", "object"],
-      elite: ["elite", "object", "treasure"],
-      boss: ["boss", "enemy", "object", "treasure"],
-      treasure: ["enemy", "treasure", "object"],
-      event: ["enemy", "explore", "trap"],
-      merchant: ["enemy", "merchant", "object"],
-      fountain: ["enemy", "fountain", "object"],
-      shrine: ["enemy", "shrine", "explore"]
-    };
+    const templates =
+      ROOM_TEMPLATES[roomType] ||
+      ROOM_TEMPLATES.normal;
 
-    const source = templates[roomType] || templates.normal;
-    const guaranteedExtra = Math.floor((this.state.floor - 1) / 2);
-    const randomExtra = Math.floor(Math.random() * (2 + Math.floor(this.state.floor / 4)));
-    const typeBonus = roomType === "boss" ? 3 : roomType === "elite" ? 2 : 0;
-    const count = Math.min(18, source.length + guaranteedExtra + randomExtra + typeBonus);
+    const template =
+      templates[Math.floor(this.random() * templates.length)];
 
-    const tiles = Array.from({ length: count }, (_, id) => {
-      let type = source[id % source.length];
+    const tiles = [];
+    let id = 0;
 
-      if (id >= source.length) {
-        const pool = ["enemy", "enemy", "explore", "object", "object", "trap"];
-        if (roomType === "boss") pool.push("enemy");
-        if (roomType === "treasure") pool.push("treasure");
-        type = pool[Math.floor(Math.random() * pool.length)];
-      }
-
+    const addTile = (type, row, column, width = 1, height = 1) => {
       const tile = {
-        id,
+        id: id++,
         type,
         progress: type === "explore" ? 0 : 100,
         discovered: type !== "explore",
         completed: false,
         locked: type === "treasure",
         lastHitAt: 0,
-        grid: null
+        grid: {
+          row: row + 1,
+          column: column + 1,
+          width,
+          height
+        }
       };
 
-      if (type === "enemy") tile.enemy = this.makeEnemy(false, false);
+      if (type === "enemy") {
+        tile.enemy = this.makeEnemy(false, false);
+      }
 
       if (type === "elite") {
         tile.type = "enemy";
@@ -304,8 +348,9 @@ export class Game {
       }
 
       if (type === "object") {
-        const isVase = Math.random() < 0.5;
+        const isVase = this.random() < 0.62;
         const hp = 18 + this.state.floor * 2;
+
         tile.object = {
           name: isVase ? "Vase" : "Kiste",
           icon: isVase ? "🏺" : "📦",
@@ -314,10 +359,196 @@ export class Game {
         };
       }
 
-      return tile;
-    });
+      tiles.push(tile);
+    };
 
-    return this.placeTilesOnGrid(tiles);
+    const consumed = new Set();
+
+    for (let row = 0; row < 8; row += 1) {
+      for (let column = 0; column < 8; column += 1) {
+        const key = `${row},${column}`;
+
+        if (consumed.has(key)) continue;
+
+        const symbol = template.layout[row]?.[column] || ".";
+
+        if (symbol === "E") {
+          addTile("enemy", row, column, 2, 1);
+          consumed.add(`${row},${column + 1}`);
+        } else if (symbol === "L") {
+          addTile("elite", row, column, 2, 1);
+          consumed.add(`${row},${column + 1}`);
+        } else if (symbol === "B") {
+          addTile("boss", row, column, 2, 2);
+          consumed.add(`${row},${column + 1}`);
+          consumed.add(`${row + 1},${column}`);
+          consumed.add(`${row + 1},${column + 1}`);
+        } else if (symbol === "H") {
+          addTile("shrine", row, column, 2, 2);
+          consumed.add(`${row},${column + 1}`);
+          consumed.add(`${row + 1},${column}`);
+          consumed.add(`${row + 1},${column + 1}`);
+        } else if (symbol === "V") {
+          addTile("object", row, column);
+        } else if (symbol === "C") {
+          addTile("treasure", row, column);
+        } else if (symbol === "W") {
+          addTile("fountain", row, column);
+        } else if (symbol === "M") {
+          addTile("merchant", row, column);
+        } else if (symbol === "?") {
+          addTile("explore", row, column);
+        }
+      }
+    }
+
+    // Mit steigender Etage werden zusätzliche Gegner und Objekte ergänzt.
+    const additionalCount = Math.min(
+      6,
+      Math.floor((this.state.floor - 1) / 4)
+    );
+
+    for (let index = 0; index < additionalCount; index += 1) {
+      const free = this.findFreeTemplateCell(tiles, index % 2 === 0 ? 2 : 1);
+
+      if (!free) break;
+
+      if (index % 2 === 0) {
+        addTile("enemy", free.row, free.column, 2, 1);
+      } else {
+        addTile("object", free.row, free.column, 1, 1);
+      }
+    }
+
+    tiles.templateId = template.id;
+    tiles.decorations = this.createRoomDecorations(tiles);
+
+    return tiles;
+  }
+
+  findFreeTemplateCell(tiles, width = 1, height = 1) {
+    const occupied = Array.from(
+      { length: 8 },
+      () => Array(8).fill(false)
+    );
+
+    for (const tile of tiles) {
+      const grid = tile.grid;
+
+      for (
+        let row = grid.row - 1;
+        row < grid.row - 1 + grid.height;
+        row += 1
+      ) {
+        for (
+          let column = grid.column - 1;
+          column < grid.column - 1 + grid.width;
+          column += 1
+        ) {
+          if (row >= 0 && row < 8 && column >= 0 && column < 8) {
+            occupied[row][column] = true;
+          }
+        }
+      }
+    }
+
+    const candidates = [];
+
+    for (let row = 0; row <= 8 - height; row += 1) {
+      for (let column = 0; column <= 8 - width; column += 1) {
+        let available = true;
+
+        for (let y = row; y < row + height; y += 1) {
+          for (let x = column; x < column + width; x += 1) {
+            if (occupied[y][x]) {
+              available = false;
+              break;
+            }
+          }
+          if (!available) break;
+        }
+
+        if (available) {
+          candidates.push({ row, column });
+        }
+      }
+    }
+
+    return candidates.length
+      ? candidates[Math.floor(this.random() * candidates.length)]
+      : null;
+  }
+
+  createRoomDecorations(tiles) {
+    const decorations =
+      BIOME_DECORATIONS[this.currentBiome().id] ||
+      BIOME_DECORATIONS.mine;
+
+    const count = 5 + Math.floor(this.random() * 5);
+    const result = [];
+
+    for (let index = 0; index < count; index += 1) {
+      const free = this.findFreeDecorationCell(tiles, result);
+
+      if (!free) break;
+
+      const decoration =
+        decorations[Math.floor(this.random() * decorations.length)];
+
+      result.push({
+        id: `decor-${index}`,
+        row: free.row + 1,
+        column: free.column + 1,
+        icon: decoration.icon,
+        className: decoration.className
+      });
+    }
+
+    return result;
+  }
+
+  findFreeDecorationCell(tiles, decorations) {
+    const occupied = new Set();
+
+    for (const tile of tiles) {
+      const grid = tile.grid;
+
+      for (
+        let row = grid.row - 1;
+        row < grid.row - 1 + grid.height;
+        row += 1
+      ) {
+        for (
+          let column = grid.column - 1;
+          column < grid.column - 1 + grid.width;
+          column += 1
+        ) {
+          occupied.add(`${row},${column}`);
+        }
+      }
+    }
+
+    for (const decoration of decorations) {
+      occupied.add(
+        `${decoration.row - 1},${decoration.column - 1}`
+      );
+    }
+
+    const candidates = [];
+
+    for (let row = 0; row < 8; row += 1) {
+      for (let column = 0; column < 8; column += 1) {
+        const key = `${row},${column}`;
+
+        if (!occupied.has(key)) {
+          candidates.push({ row, column });
+        }
+      }
+    }
+
+    return candidates.length
+      ? candidates[Math.floor(this.random() * candidates.length)]
+      : null;
   }
 
   placeTilesOnGrid(tiles) {
@@ -373,7 +604,7 @@ export class Game {
         }
 
         const position =
-          fallback[Math.floor(Math.random() * fallback.length)];
+          fallback[Math.floor(this.random() * fallback.length)];
 
         tile.grid = {
           column: position.column + 1,
@@ -386,7 +617,7 @@ export class Game {
       }
 
       const position =
-        candidates[Math.floor(Math.random() * candidates.length)];
+        candidates[Math.floor(this.random() * candidates.length)];
 
       tile.grid = {
         column: position.column + 1,
@@ -457,11 +688,12 @@ export class Game {
       boss
         ? biome.boss
         : biome.enemies[
-            Math.floor(Math.random() * biome.enemies.length)
+            Math.floor(this.random() * biome.enemies.length)
           ]
     );
 
     const floorIndex = Math.max(0, this.state.floor - 1);
+    const zoneBalance = this.currentZoneBalance();
 
     // Kontinuierliche Etagenskalierung:
     // HP +8 %, Angriff +6 %, Verteidigung +5 %, Belohnungen +5 %.
@@ -485,7 +717,8 @@ export class Game {
       Math.round(
         base.defense *
         defenseScale *
-        milestoneMultiplier
+        milestoneMultiplier *
+        zoneBalance.enemyDefense
       )
     );
 
@@ -495,6 +728,7 @@ export class Game {
         base.hp *
         hpScale *
         milestoneMultiplier *
+        zoneBalance.enemyHp *
         eliteHpMultiplier *
         bossHpMultiplier
       )
@@ -506,6 +740,7 @@ export class Game {
         base.attack *
         attackScale *
         milestoneMultiplier *
+        zoneBalance.enemyAttack *
         eliteAttackMultiplier *
         bossAttackMultiplier
       )
@@ -526,6 +761,7 @@ export class Game {
         Math.round(
           base.reward *
           rewardScale *
+          zoneBalance.gold *
           (boss ? 2.3 : elite ? 1.6 : 1)
         )
       ),
@@ -534,6 +770,7 @@ export class Game {
         Math.round(
           base.xp *
           rewardScale *
+          zoneBalance.xp *
           (boss ? 2.3 : elite ? 1.6 : 1)
         )
       )
@@ -551,15 +788,20 @@ export class Game {
   createEquipmentReward(source = "normal") {
     const base = structuredClone(
       BASE_ITEMS.filter(item => item.slot)[
-        Math.floor(Math.random() * BASE_ITEMS.filter(item => item.slot).length)
+        Math.floor(this.random() * BASE_ITEMS.filter(item => item.slot).length)
       ]
     );
 
-    const itemLevel = Math.max(1, this.state.floor + Math.floor(Math.random() * 3) - 1);
-    let roll = Math.random();
-    if (source === "boss") roll *= 0.16;
-    else if (source === "elite") roll *= 0.40;
-    else if (source === "chest") roll *= 0.72;
+    const itemLevel = Math.max(1, this.state.floor + Math.floor(this.random() * 3) - 1);
+    let roll = this.random();
+    const sourceMultiplier = {
+      boss: 0.12,
+      elite: 0.34,
+      chest: 0.62,
+      merchant: 0.78,
+      normal: 1
+    }[source] || 1;
+    roll *= sourceMultiplier;
 
     let rarity = RARITIES[0];
     for (const candidate of [...RARITIES].reverse()) {
@@ -582,9 +824,12 @@ export class Game {
     const affixPool = [
       ...PREFIXES.map(value => ({ ...value, kind: "prefix" })),
       ...SUFFIXES.map(value => ({ ...value, kind: "suffix" }))
-    ].sort(() => Math.random() - 0.5);
+    ];
 
-    const affixes = affixPool.slice(0, rarity.affixes);
+    const shuffledAffixPool =
+      this.context.seed.shuffle(affixPool);
+
+    const affixes = shuffledAffixPool.slice(0, rarity.affixes);
     const prefixes = affixes.filter(a => a.kind === "prefix");
     const suffixes = affixes.filter(a => a.kind === "suffix");
 
@@ -605,7 +850,7 @@ export class Game {
     ].filter(Boolean).join(" ");
     base.power = this.itemPower(base);
     base.value = Math.round((base.value || 10) * scale + base.power * 1.2);
-    base.uid = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    base.uid = crypto.randomUUID?.() || `${Date.now()}-${this.random()}`;
     return base;
   }
 
@@ -620,11 +865,24 @@ export class Game {
   }
 
   createMerchantStock() {
+    const potionPool = BASE_ITEMS.filter(item => item.type === "potion");
+
     return [
       this.createEquipmentReward("merchant"),
       this.createEquipmentReward("merchant"),
-      structuredClone(BASE_ITEMS.find(item => item.type === "potion")),
-      { id: "merchant-key", name: "Silberschlüssel", icon: "🗝️", type: "merchant-key", value: 45 }
+      this.createEquipmentReward("merchant"),
+      structuredClone(
+        this.state.floor >= 15
+          ? potionPool.find(item => item.id === "greater-potion")
+          : potionPool.find(item => item.id === "potion")
+      ),
+      {
+        id: "merchant-key",
+        name: "Silberschlüssel",
+        icon: "🗝️",
+        type: "merchant-key",
+        value: 45 + this.state.floor * 2
+      }
     ];
   }
 
@@ -794,7 +1052,7 @@ export class Game {
     document.documentElement.style.setProperty("--biome-accent", biome.accent);
 
     this.root.innerHTML = `
-      <div class="game-shell">
+      <div class="game-shell biome-${biome.id}">
         ${this.renderTopbar()}
         <div class="main-grid">
           ${this.renderSidebar()}
@@ -803,6 +1061,7 @@ export class Game {
         </div>
       </div>
       ${this.renderOverlay()}
+      ${this.renderRoomTransition()}
       ${this.renderStageTransition()}
     `;
     this.bind();
@@ -930,7 +1189,8 @@ export class Game {
             <span>Alle Gegner wurden geheilt. Warte auf vollständige Genesung.</span>
           </div>` : ""}
         <div class="board-wrap">
-          <div class="dungeon-board">
+          <div class="dungeon-board room-template-${this.currentRoom.type}">
+            ${this.renderRoomDecorations()}
             ${this.currentTiles
               .filter(tile => !tile.hiddenByCapacity)
               .map(tile => this.renderTile(tile))
@@ -940,6 +1200,21 @@ export class Game {
         </div>
       </section>
     `;
+  }
+
+  renderRoomDecorations() {
+    return (this.currentRoom.decorations || [])
+      .map(decoration => `
+        <span
+          class="room-decoration decor-${decoration.className}"
+          style="
+            grid-column:${decoration.column};
+            grid-row:${decoration.row};
+          ">
+          ${decoration.icon}
+        </span>
+      `)
+      .join("");
   }
 
   renderTile(tile) {
@@ -1134,36 +1409,138 @@ export class Game {
     return `hsl(${baseHue} ${saturation}% ${lightness}%)`;
   }
 
+  filteredInventoryEntries() {
+    const entries = this.player.inventory.map((item, index) => ({ item, index }));
+
+    const filtered = entries.filter(({ item }) => {
+      if (this.inventoryFilter === "all") return true;
+      if (this.inventoryFilter === "equipment") return Boolean(item.slot);
+      if (this.inventoryFilter === "consumables") return item.type === "potion";
+      if (this.inventoryFilter === "weapons") return item.slot === "weapon";
+      if (this.inventoryFilter === "armor") {
+        return ["offhand", "helmet", "armor", "gloves", "pants", "boots"].includes(item.slot);
+      }
+      if (this.inventoryFilter === "jewelry") {
+        return ["ring1", "ring2", "amulet"].includes(item.slot);
+      }
+      return true;
+    });
+
+    const rarityRank = {
+      common: 0, uncommon: 1, rare: 2,
+      epic: 3, legendary: 4, mythic: 5
+    };
+
+    filtered.sort((a, b) => {
+      if (this.inventorySort === "power-desc") {
+        return (b.item.power || 0) - (a.item.power || 0);
+      }
+      if (this.inventorySort === "rarity-desc") {
+        return (rarityRank[b.item.rarity] || 0) -
+               (rarityRank[a.item.rarity] || 0);
+      }
+      if (this.inventorySort === "value-desc") {
+        return (b.item.value || 0) - (a.item.value || 0);
+      }
+      if (this.inventorySort === "name-asc") {
+        return String(a.item.name).localeCompare(String(b.item.name), "de");
+      }
+      return a.index - b.index;
+    });
+
+    return filtered;
+  }
+
+  inventoryFilterLabel(filter) {
+    return {
+      all: "Alle",
+      equipment: "Ausrüstung",
+      weapons: "Waffen",
+      armor: "Rüstung",
+      jewelry: "Schmuck",
+      consumables: "Tränke"
+    }[filter] || "Alle";
+  }
+
+  weaponTypeLabel(type) {
+    return {
+      sword: "Schwert",
+      dagger: "Dolch",
+      heavy: "Schwere Waffe",
+      ranged: "Fernkampf",
+      magic: "Magisch"
+    }[type] || "Waffe";
+  }
+
   renderRightPanel() {
     const selected = this.player.inventory[this.selectedItem] || null;
+    const entries = this.filteredInventoryEntries();
+
     return `
       <aside class="right-panel box">
         <div class="equipment-slots expanded-slots">
-          ${this.equipmentSlots().map(slot => this.equipmentSlot(slot.id, slot.label)).join("")}
+          ${this.equipmentSlots().map(slot =>
+            this.equipmentSlot(slot.id, slot.label)).join("")}
         </div>
+
         <div class="tabs">
-          <button class="tab ${this.activeTab === "equipment" ? "active" : ""}" data-tab="equipment">AUSRÜSTUNG</button>
-          <button class="tab ${this.activeTab === "inventory" ? "active" : ""}" data-tab="inventory">ITEMS</button>
+          <button class="tab ${this.activeTab === "equipment" ? "active" : ""}"
+            data-tab="equipment">AUSRÜSTUNG</button>
+          <button class="tab ${this.activeTab === "inventory" ? "active" : ""}"
+            data-tab="inventory">ITEMS</button>
         </div>
+
+        <div class="inventory-toolbar">
+          <select id="inventoryFilter">
+            ${["all","equipment","weapons","armor","jewelry","consumables"]
+              .map(filter => `<option value="${filter}"
+                ${this.inventoryFilter === filter ? "selected" : ""}>
+                ${this.inventoryFilterLabel(filter)}
+              </option>`).join("")}
+          </select>
+
+          <select id="inventorySort">
+            <option value="power-desc"
+              ${this.inventorySort === "power-desc" ? "selected" : ""}>Power ↓</option>
+            <option value="rarity-desc"
+              ${this.inventorySort === "rarity-desc" ? "selected" : ""}>Seltenheit ↓</option>
+            <option value="value-desc"
+              ${this.inventorySort === "value-desc" ? "selected" : ""}>Wert ↓</option>
+            <option value="name-asc"
+              ${this.inventorySort === "name-asc" ? "selected" : ""}>Name A–Z</option>
+          </select>
+        </div>
+
         <div class="inventory-pane">
           <div class="item-info">
-            ${selected ? selected.slot ? this.renderEquipmentComparison(selected)
-              : this.renderConsumableDetails(selected)
+            ${selected
+              ? selected.slot
+                ? this.renderEquipmentComparison(selected)
+                : this.renderConsumableDetails(selected)
               : `<p>Wähle einen Gegenstand.</p>`}
           </div>
+
           <div class="item-grid">
-            ${this.player.inventory.map((item, index) => `
-              <button class="item-cell ${index === this.selectedItem ? "selected" : ""}"
+            ${entries.map(({ item, index }) => `
+              <button class="item-cell rarity-border-${item.rarity || "common"}
+                ${index === this.selectedItem ? "selected" : ""}"
                 data-item="${index}">
+                <span class="item-level">${item.itemLevel ? `IL ${item.itemLevel}` : ""}</span>
                 <span class="big">${item.icon}</span>
-                <span>${this.escape(item.name)}</span>
-              </button>`).join("")}
+                <span class="item-cell-name">${this.escape(item.name)}</span>
+                <span class="item-cell-power">${item.power ? `PWR ${item.power}` : ""}</span>
+              </button>`).join("") ||
+              `<div class="inventory-empty">Keine passenden Gegenstände.</div>`}
           </div>
         </div>
+
         <div class="bottom-actions inventory-actions">
-          <button class="action-btn use" id="useBtn" ${!selected || selected.type !== "potion" ? "disabled" : ""}>BENUTZEN</button>
-          <button class="action-btn primary" id="equipBtn" ${!selected || !selected.slot ? "disabled" : ""}>AUSRÜSTEN</button>
-          <button class="action-btn sell" id="sellBtn" ${!selected ? "disabled" : ""}>VERKAUFEN</button>
+          <button class="action-btn use" id="useBtn"
+            ${!selected || selected.type !== "potion" ? "disabled" : ""}>BENUTZEN</button>
+          <button class="action-btn primary" id="equipBtn"
+            ${!selected || !selected.slot ? "disabled" : ""}>AUSRÜSTEN</button>
+          <button class="action-btn sell" id="sellBtn"
+            ${!selected ? "disabled" : ""}>VERKAUFEN</button>
         </div>
       </aside>
     `;
@@ -1171,15 +1548,35 @@ export class Game {
 
   renderEquipmentComparison(selected) {
     const equipped = this.player.equipment[selected.slot] || null;
+    const selectedPower = selected.power || this.itemPower(selected);
+    const equippedPower = equipped ? (equipped.power || this.itemPower(equipped)) : 0;
+    const powerDifference = selectedPower - equippedPower;
+
     return `<section class="comparison-card">
       <div class="comparison-heading">
         <div>
-          <span class="comparison-kicker">ILVL ${selected.itemLevel || 1} · POWER ${selected.power || 0}</span>
-          <h3 class="comparison-item-name rarity-${selected.rarity || "common"}">${this.escape(selected.name)}</h3>
-          <span class="comparison-rarity">${selected.rarityLabel || "Gewöhnlich"}</span>
+          <span class="comparison-kicker">
+            ${this.equipmentSlotLabel(selected.slot)} · ILVL ${selected.itemLevel || 1}
+          </span>
+          <h3 class="comparison-item-name rarity-${selected.rarity || "common"}">
+            ${this.escape(selected.name)}
+          </h3>
+          <span class="comparison-rarity">
+            ${selected.rarityLabel || "Gewöhnlich"}
+            ${selected.weaponType ? ` · ${this.weaponTypeLabel(selected.weaponType)}` : ""}
+          </span>
         </div>
         <span class="comparison-value">${selected.value || 0} G</span>
       </div>
+
+      <div class="item-power-summary">
+        <span>ITEM-POWER</span>
+        <strong>${selectedPower}</strong>
+        <em class="${powerDifference >= 0 ? "better" : "worse"}">
+          ${powerDifference > 0 ? "+" : ""}${powerDifference}
+        </em>
+      </div>
+
       <div class="comparison-table">
         ${this.comparisonRow("Angriff", selected.attack || 0, equipped?.attack || 0)}
         ${this.comparisonRow("Verteidigung", selected.defense || 0, equipped?.defense || 0)}
@@ -1187,8 +1584,15 @@ export class Game {
         ${this.comparisonRow("Krit", selected.critChance || 0, equipped?.critChance || 0)}
         ${this.comparisonRow("Erholung", selected.recovery || 0, equipped?.recovery || 0)}
       </div>
+
       <div class="affix-list">
-        ${(selected.affixes || []).map(a => `<span>${this.escape(a)}</span>`).join("")}
+        ${(selected.affixes || []).map(a => `<span>${this.escape(a)}</span>`).join("") ||
+          `<span class="no-affix">Keine Affixe</span>`}
+      </div>
+
+      <div class="equipped-reference">
+        <span>Aktuell ausgerüstet:</span>
+        <strong>${equipped ? this.escape(equipped.name) : "Nichts"}</strong>
       </div>
     </section>`;
   }
@@ -1223,6 +1627,22 @@ export class Game {
         this.render();
       };
     });
+
+    document.getElementById("inventoryFilter")?.addEventListener(
+      "change",
+      event => {
+        this.inventoryFilter = event.target.value;
+        this.render();
+      }
+    );
+
+    document.getElementById("inventorySort")?.addEventListener(
+      "change",
+      event => {
+        this.inventorySort = event.target.value;
+        this.render();
+      }
+    );
     document.querySelectorAll("[data-tab]").forEach(button => {
       button.onclick = () => {
         this.activeTab = button.dataset.tab;
@@ -1246,6 +1666,13 @@ export class Game {
     });
     document.getElementById("saveBtn")?.addEventListener("click", () => this.save());
     document.getElementById("resetBtn")?.addEventListener("click", () => this.reset());
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "F2") {
+        event.preventDefault();
+        this.debugPanel.toggle();
+      }
+    }, { once: true });
 
     document.querySelectorAll("[data-buy]").forEach(button => {
       button.onclick = () => this.buyMerchantItem(Number(button.dataset.buy));
@@ -1289,7 +1716,10 @@ export class Game {
       const item = this.createEquipmentReward("chest");
       this.player.inventory.push(item);
       this.registerItem(item);
-      this.state.stats.chestsOpened += 1;
+      this.context.events.emit("chest:opened", {
+        floor: this.state.floor,
+        roomId: this.currentRoom.id
+      });
       this.updateQuest("chest", 1);
       return this.finishTile(tile, `Schatztruhe: ${item.name} gefunden.`);
     }
@@ -1341,10 +1771,13 @@ export class Game {
     this.playTileActionEffect(tile, "explore");
     tile.progress = Math.min(
       100,
-      tile.progress + 20 + Math.random() * 8
+      tile.progress + 20 + this.random() * 8
     );
 
-    this.state.stats.exploredTiles += 1;
+    this.context.events.emit("tile:explored", {
+      tileId: tile.id,
+      roomId: this.currentRoom.id
+    });
     this.updateQuest("explore", 1);
     this.state.message =
       `Erkundung: ${Math.floor(tile.progress)} %.`;
@@ -1360,7 +1793,7 @@ export class Game {
       ];
 
       tile.type =
-        outcomes[Math.floor(Math.random() * outcomes.length)];
+        outcomes[Math.floor(this.random() * outcomes.length)];
       tile.discovered = true;
       tile.locked = tile.type === "treasure";
 
@@ -1370,7 +1803,7 @@ export class Game {
 
       if (tile.type === "object") {
         const hp = 18 + this.state.floor * 2;
-        const vase = Math.random() < 0.5;
+        const vase = this.random() < 0.5;
 
         tile.object = {
           name: vase ? "Vase" : "Kiste",
@@ -1406,7 +1839,120 @@ export class Game {
     this.render();
   }
 
-(tile) {
+  currentWeaponProfile() {
+    const weapon = this.player.equipment.weapon;
+    const explicitType = weapon?.weaponType;
+    const name = String(weapon?.name || "").toLowerCase();
+
+    if (explicitType === "heavy" || name.includes("axt") ||
+        name.includes("hammer") || name.includes("kolben")) {
+      return { type: "heavy", label: "Schwere Waffe", hitChance: 78 };
+    }
+
+    if (explicitType === "dagger" || name.includes("dolch") ||
+        name.includes("messer")) {
+      return { type: "dagger", label: "Dolch", hitChance: 94 };
+    }
+
+    if (explicitType === "ranged" || name.includes("bogen") ||
+        name.includes("armbrust")) {
+      return { type: "ranged", label: "Fernkampfwaffe", hitChance: 86 };
+    }
+
+    if (explicitType === "magic" || name.includes("stab") ||
+        name.includes("zepter")) {
+      return { type: "magic", label: "Magische Waffe", hitChance: 90 };
+    }
+
+    if (explicitType === "sword" || name.includes("schwert")) {
+      return { type: "sword", label: "Schwert", hitChance: 88 };
+    }
+
+    return {
+      type: "unarmed",
+      label: weapon ? "Waffe" : "Unbewaffnet",
+      hitChance: weapon ? 86 : 82
+    };
+  }
+
+  rollPlayerHit() {
+    const profile = this.currentWeaponProfile();
+    const chance = Math.max(45, Math.min(98, profile.hitChance));
+
+    return {
+      hit: this.random() * 100 < chance,
+      chance,
+      profile
+    };
+  }
+
+  playTileActionEffect(tile, type, text = "") {
+    this.tileEffect = {
+      tileId: tile.id,
+      type,
+      nonce: Date.now()
+    };
+
+    if (text) {
+      this.combatFloater = {
+        tileId: tile.id,
+        text,
+        type,
+        nonce: Date.now()
+      };
+    }
+
+    window.setTimeout(() => {
+      if (this.tileEffect?.tileId === tile.id) {
+        this.tileEffect = null;
+      }
+
+      if (this.combatFloater?.tileId === tile.id) {
+        this.combatFloater = null;
+      }
+
+      this.render();
+    }, 760);
+  }
+
+  renderTileEffect(tileId) {
+    if (!this.tileEffect || this.tileEffect.tileId !== tileId) {
+      return "";
+    }
+
+    const particles = Array.from({ length: 12 }, (_, index) => {
+      const angle = index * 30;
+      const distance = 22 + (index % 4) * 8;
+
+      return `
+        <span style="
+          --particle-angle:${angle}deg;
+          --particle-distance:${distance}px;">
+        </span>
+      `;
+    }).join("");
+
+    return `
+      <span class="action-effect effect-${this.tileEffect.type}">
+        ${particles}
+      </span>
+    `;
+  }
+
+  renderCombatFloater(tileId) {
+    if (!this.combatFloater ||
+        this.combatFloater.tileId !== tileId) {
+      return "";
+    }
+
+    return `
+      <span class="combat-floater floater-${this.combatFloater.type}">
+        ${this.escape(this.combatFloater.text)}
+      </span>
+    `;
+  }
+
+  attackEnemy(tile) {
     if (!this.spendAp(ACTION_AP_COST)) return;
 
     const enemy = tile.enemy;
@@ -1417,7 +1963,7 @@ export class Game {
 
     if (!hitRoll.hit) {
       const enemyCritical =
-        Math.random() * 100 < enemy.critChance;
+        this.random() * 100 < enemy.critChance;
 
       let retaliation = this.damage(
         enemy.attack,
@@ -1447,7 +1993,7 @@ export class Game {
     }
 
     const critical =
-      Math.random() * 100 < this.totalCritChance;
+      this.random() * 100 < this.totalCritChance;
 
     let damage = this.damage(this.attack, enemy.defense);
 
@@ -1465,7 +2011,7 @@ export class Game {
 
     if (enemy.hp > 0) {
       const enemyCritical =
-        Math.random() * 100 < enemy.critChance;
+        this.random() * 100 < enemy.critChance;
 
       let retaliation = this.damage(
         enemy.attack,
@@ -1496,11 +2042,14 @@ export class Game {
     this.state.gold += enemy.reward;
     this.gainXp(enemy.xp);
     this.registerEnemy(enemy);
-    this.state.stats.enemiesKilled += 1;
+    this.context.events.emit("enemy:defeated", {
+      enemy,
+      floor: this.state.floor,
+      roomId: this.currentRoom.id
+    });
     this.updateQuest("kill", 1);
 
     if (enemy.boss) {
-      this.state.stats.bossesKilled += 1;
       this.updateQuest("boss", 1);
     }
 
@@ -1513,7 +2062,7 @@ export class Game {
       `${enemy.name} besiegt. ` +
       `+${enemy.reward} Gold, +${enemy.xp} XP.`;
 
-    if (Math.random() < dropChance) {
+    if (this.random() < dropChance) {
       const item = this.createEquipmentReward(
         enemy.boss
           ? "boss"
@@ -1528,7 +2077,7 @@ export class Game {
     }
 
     if (
-      Math.random() <
+      this.random() <
       (enemy.boss ? 0.85 : enemy.elite ? 0.45 : 0.14)
     ) {
       this.state.silverKeys += 1;
@@ -1554,7 +2103,7 @@ export class Game {
       return this.render();
     }
 
-    const roll = Math.random();
+    const roll = this.random();
 
     if (roll < 0.18) {
       this.state.silverKeys += 1;
@@ -1576,7 +2125,7 @@ export class Game {
       );
     }
 
-    const gold = 8 + Math.floor(Math.random() * 20);
+    const gold = 8 + Math.floor(this.random() * 20);
     this.state.gold += gold;
 
     this.finishTile(
@@ -1630,9 +2179,20 @@ export class Game {
     room.visited = true;
     room.revealed = true;
     this.revealAdjacentRooms(this.state.dungeon.rooms, room.id);
+    this.activeRoomTransition = {
+      biome: this.currentBiome().name,
+      room: room.id + 1,
+      type: this.roomTypeInfo(room.type).label
+    };
+
     this.state.currentRoomId = room.id;
     this.checkRoomCompletion(room.id);
     this.render();
+
+    window.setTimeout(() => {
+      this.activeRoomTransition = null;
+      this.render();
+    }, 620);
   }
 
   revealAdjacentRooms(rooms, roomId) {
@@ -1865,7 +2425,9 @@ export class Game {
   registerItem(item) {
     this.state.collection.items[item.name] =
       (this.state.collection.items[item.name] || 0) + 1;
-    this.state.stats.itemsFound += 1;
+    this.context.events.emit("item:found", {
+      item
+    });
   }
 
   useSelectedItem() {
@@ -2232,7 +2794,7 @@ export class Game {
     attack,
     defense,
     armorPenetration = 0,
-    minimumRatio = 0.15
+    minimumRatio = GLOBAL_BALANCE.minimumEnemyDamageRatio
   ) {
     const effectiveDefense = Math.max(
       0,
@@ -2241,10 +2803,10 @@ export class Game {
 
     const reduction =
       effectiveDefense /
-      (effectiveDefense + 100);
+      (effectiveDefense + GLOBAL_BALANCE.defenseConstant);
 
     const variance =
-      0.90 + Math.random() * 0.20;
+      0.90 + this.random() * 0.20;
 
     const reducedDamage =
       attack *
@@ -2262,6 +2824,22 @@ export class Game {
     );
   }
 
+  renderRoomTransition() {
+    if (!this.activeRoomTransition) return "";
+
+    return `
+      <div class="room-transition">
+        <div class="room-transition-card">
+          <span>${this.escape(this.activeRoomTransition.biome)}</span>
+          <strong>
+            ${this.escape(this.activeRoomTransition.type)}
+            · Raum ${this.activeRoomTransition.room}
+          </strong>
+        </div>
+      </div>
+    `;
+  }
+
   renderStageTransition() {
     if (!this.stageTransition) return "";
     return `<div class="stage-transition">
@@ -2274,6 +2852,12 @@ export class Game {
   }
 
   save() {
+    this.state.rngState = this.context.snapshot();
+    this.state.seed = this.context.seed.seed;
+    localStorage.setItem(
+      "dungeonlite.seed",
+      this.context.seed.seed
+    );
     localStorage.setItem(SAVE_KEY, JSON.stringify(this.state));
     this.state.message = "Spiel gespeichert.";
     this.render();
@@ -2290,6 +2874,7 @@ export class Game {
 
   reset() {
     localStorage.clear();
+    this.context.seed.setSeed(Date.now());
     this.state = this.createState();
     this.selectedItem = 0;
     this.activeOverlay = null;
