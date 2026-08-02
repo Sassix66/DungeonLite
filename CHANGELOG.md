@@ -89,3 +89,20 @@
 - Neun zusätzliche Minenraumvorlagen.
 - Minenboden, Loren-Schienen und braun-goldene UI-Akzente.
 - Zonenname und aktuelle Etage im Canvas.
+
+
+## v4.0.1
+
+### Behoben
+- Das F2-Debugpanel greift nicht mehr auf den entfernten
+  `#debugRenderer`-Button zu.
+- Alle Debugpanel-Schaltflächen werden defensiv gebunden.
+- Der F2-Listener wird nur einmal beim Spielstart registriert.
+- Im Smartphone-Querformat belegt das Inventar wieder die dritte Spalte,
+  statt Dungeon und Sidebar nach unten zu drücken.
+
+### Technisch
+- Zentrale Versionsdefinition in `js/config/version.js`.
+- Automatische Migration vorhandener Spielstände aus v4.0.0 und 3.0.x.
+- README, Architekturübersicht und Debugpanel auf v4.0.1 vereinheitlicht.
+- Tote CSS-Regeln für den entfernten Renderer-Schalter entfernt.

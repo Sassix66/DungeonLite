@@ -1,4 +1,4 @@
-# DungeonLite v1.5
+# DungeonLite v4.0.1
 
 ## Neue Etagenkarte
 
@@ -393,3 +393,12 @@ späteren finalen Sprites.
 - Minenboden mit Steinplatten und sichtbaren Loren-Schienen.
 - Eigene Farbgebung und UI-Akzente für die Mine.
 - Zonen- und Etagenname werden direkt im Dungeon eingeblendet.
+
+
+## Stabilisierung in v4.0.1
+
+- Das F2-Debugpanel erzeugt keinen Fehler mehr.
+- Der globale F2-Listener wird nur einmal registriert.
+- Das Smartphone-Querformat verwendet wieder drei echte Spalten.
+- Spielstände aus v4.0.0 und den Canvas-Versionen 3.0.x werden migriert.
+- Spielversion und Speicherformat liegen zentral in `js/config/version.js`.

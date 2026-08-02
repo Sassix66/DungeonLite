@@ -17,8 +17,10 @@ import {
   GLOBAL_BALANCE,
   getZoneBalance
 } from "./config/balance.js";
-
-const SAVE_KEY = "dungeonlite.v400";
+import {
+  LEGACY_SAVE_KEYS,
+  SAVE_KEY
+} from "./config/version.js";
 const ACTION_AP_COST = GLOBAL_BALANCE.actionApCost;
 const ENEMY_REGEN_DELAY = GLOBAL_BALANCE.enemyRegenDelayMs;
 const ENEMY_REGEN_PER_SECOND = GLOBAL_BALANCE.enemyRegenPerSecond;
@@ -56,6 +58,9 @@ export class Game {
     this.xpDisplay = { blueXp: null, whiteXp: null, catchupActive: false };
     this.state = this.load() || this.createState();
     this.loop = this.loop.bind(this);
+    this.handleGlobalKeydown =
+      this.handleGlobalKeydown.bind(this);
+    this.globalEventsBound = false;
   }
 
   createState() {
@@ -131,6 +136,7 @@ export class Game {
   }
 
   start() {
+    this.bindGlobalEvents();
     this.ensureStateShape();
 
     if (this.state.rngState) {
@@ -142,6 +148,24 @@ export class Game {
     this.render();
     this.initializeRenderEngine();
     requestAnimationFrame(this.loop);
+  }
+
+  bindGlobalEvents() {
+    if (this.globalEventsBound) return;
+
+    document.addEventListener(
+      "keydown",
+      this.handleGlobalKeydown
+    );
+
+    this.globalEventsBound = true;
+  }
+
+  handleGlobalKeydown(event) {
+    if (event.key !== "F2") return;
+
+    event.preventDefault();
+    this.debugPanel.toggle();
   }
 
   ensureStateShape() {
@@ -1721,13 +1745,6 @@ export class Game {
     document.getElementById("saveBtn")?.addEventListener("click", () => this.save());
     document.getElementById("resetBtn")?.addEventListener("click", () => this.reset());
 
-    document.addEventListener("keydown", event => {
-      if (event.key === "F2") {
-        event.preventDefault();
-        this.debugPanel.toggle();
-      }
-    }, { once: true });
-
     document.querySelectorAll("[data-buy]").forEach(button => {
       button.onclick = () => this.buyMerchantItem(Number(button.dataset.buy));
     });
@@ -2937,12 +2954,33 @@ export class Game {
   }
 
   load() {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
+    const keys = [
+      SAVE_KEY,
+      ...LEGACY_SAVE_KEYS
+    ];
+
+    for (const key of keys) {
+      const raw = localStorage.getItem(key);
+
+      if (!raw) continue;
+
+      try {
+        const state = JSON.parse(raw);
+
+        if (key !== SAVE_KEY) {
+          localStorage.setItem(
+            SAVE_KEY,
+            JSON.stringify(state)
+          );
+        }
+
+        return state;
+      } catch {
+        // Beschädigte Spielstände werden übersprungen.
+      }
     }
+
+    return null;
   }
 
   reset() {

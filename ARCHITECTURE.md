@@ -1,4 +1,4 @@
-# DungeonLite 3.0.1 – Architektur
+# DungeonLite 4.0.1 – Architektur
 
 ## Kernmodule
 
@@ -50,8 +50,8 @@ Enthalten:
 ## Renderer 3.0.2
 
 ### `renderer/RenderEngine.js`
-Verwaltet Render-Loop, FPS, Delta-Time, Größenanpassung und Umschaltung
-zwischen DOM- und Canvas-Renderer.
+Verwaltet Render-Loop, FPS, Delta-Time, Größenanpassung und den
+Canvas-only-Dungeonrenderer.
 
 ### `renderer/CanvasRenderer.js`
 Zeichnet den aktuellen Raum in acht festen Ebenen.
@@ -65,8 +65,8 @@ Vorbereitung für spätere Kamerabewegung und Zoom.
 ### `assets/AssetManager.js`
 Zentrale Lade- und Cache-Schicht für Bilder und JSON-Daten.
 
-Der DOM-Renderer bleibt vorerst als Rückfalloption erhalten. Der aktive
-Renderer kann im F2-Debug-Menü gewechselt werden.
+Der sichtbare Dungeon wird ausschließlich über Canvas gerendert.
+HUD, Inventar, Karte und Dialoge bleiben DOM-basiert.
 
 
 ## Visuelle Systeme 3.0.3
@@ -104,3 +104,17 @@ Der DOM-Dungeonrenderer ist nicht mehr Teil der sichtbaren Spielfläche.
 - Beleuchtung
 
 Das restliche HUD bleibt bewusst DOM-basiert.
+
+
+## Version und Persistenz 4.0.1
+
+`config/version.js` enthält die zentrale Spielversion, den aktuellen
+Speicherschlüssel und die unterstützten Legacy-Schlüssel. Beim Laden wird
+der erste gültige ältere Spielstand automatisch auf den aktuellen Schlüssel
+kopiert.
+
+## Globale Eingaben
+
+Der F2-Listener wird einmalig beim Spielstart registriert. Normale
+UI-Handler werden nach einem DOM-Render weiterhin an die neu erzeugten
+Elemente gebunden.

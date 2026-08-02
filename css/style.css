@@ -1509,6 +1509,10 @@ button.map-room:disabled {
     overflow: hidden;
   }
 
+  .right-panel {
+    grid-column: auto;
+  }
+
   .stat-card {
     margin-bottom: 3px;
     padding: 3px;
@@ -3013,12 +3017,6 @@ body {
   grid-template-columns: 1fr 1fr;
 }
 
-#debugRenderer {
-  grid-column: 1 / -1;
-  background: #79c4d2;
-}
-
-
 /* ================================================================
    DungeonLite v3.0.3 – Canvas interaction and visual systems
    ================================================================ */
@@ -3054,9 +3052,6 @@ body {
   pointer-events: none;
 }
 
-#debugRenderer {
-  display: none !important;
-}
 
 
 /* ================================================================
@@ -3084,4 +3079,15 @@ body {
   background:
     radial-gradient(circle at 50% 15%, rgba(195, 145, 75, .08), transparent 38%),
     #15120f;
+}
+
+
+/* ================================================================
+   DungeonLite v4.0.1 – Stabilisierung
+   ================================================================ */
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .main-grid > .right-panel {
+    grid-column: auto;
+  }
 }

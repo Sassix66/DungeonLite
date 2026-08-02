@@ -1,3 +1,5 @@
+import { GAME_VERSION } from "../config/version.js";
+
 export class DebugPanel {
   constructor(game) {
     this.game = game;
@@ -28,7 +30,7 @@ export class DebugPanel {
 
     const renderStats =
       this.game.renderEngine?.stats() || {
-        mode: "dom",
+        mode: "canvas",
         fps: 0,
         frameTime: 0,
         drawCalls: 0,
@@ -41,7 +43,7 @@ export class DebugPanel {
 
     panel.innerHTML = `
       <header>
-        <strong>DEBUG 3.0.1</strong>
+        <strong>DEBUG ${GAME_VERSION}</strong>
         <button id="debugClose">×</button>
       </header>
 
@@ -124,39 +126,40 @@ export class DebugPanel {
       </div>
     `;
 
-    panel.querySelector("#debugClose").onclick =
-      () => this.toggle();
+    const bindClick = (selector, handler) => {
+      const element = panel.querySelector(selector);
 
-    panel.querySelector("#debugGold").onclick = () => {
+      if (element) {
+        element.onclick = handler;
+      }
+    };
+
+    bindClick("#debugClose", () => this.toggle());
+
+    bindClick("#debugGold", () => {
       this.game.state.gold += 1000;
       this.game.render();
       this.render();
-    };
+    });
 
-    panel.querySelector("#debugXp").onclick = () => {
+    bindClick("#debugXp", () => {
       this.game.gainXp(100);
       this.render();
-    };
+    });
 
-    panel.querySelector("#debugNextFloor").onclick = () => {
+    bindClick("#debugNextFloor", () => {
       this.game.state.dungeon.exitUnlocked = true;
       this.game.descendFloor();
       this.render();
-    };
+    });
 
-    panel.querySelector("#debugReroll").onclick = () => {
+    bindClick("#debugReroll", () => {
       const room = this.game.currentRoom;
       room.tiles = this.game.createRoomTiles(room.type);
       room.decorations = room.tiles.decorations || [];
       room.templateId = room.tiles.templateId || "unknown";
       this.game.render();
       this.render();
-    };
-
-    panel.querySelector("#debugRenderer").onclick = () => {
-      const mode = this.game.renderEngine?.toggleMode() || "dom";
-      localStorage.setItem("dungeonlite.renderer", mode);
-      this.render();
-    };
+    });
   }
 }
