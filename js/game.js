@@ -1,10 +1,12 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 import { AudioManager } from "./audio.js";
 
-const SAVE_KEY = "dungeonlite.v10";
+const SAVE_KEY = "dungeonlite.v105";
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
 const PLAYER_REGEN_DELAY = 5000;
+const DEFEAT_REGEN_MULTIPLIER = 6;
+const DEFEAT_REGEN_BONUS = 4;
 
 export class Game {
   constructor(root) {
@@ -53,6 +55,7 @@ export class Game {
         baseDefense: 5,
         recovery: 1,
         talentPoints: 0,
+        defeated: false,
         equipment: {
           weapon: null,
           helmet: null,
@@ -262,7 +265,23 @@ export class Game {
 
     const outOfCombatFor = now - (this.state.lastCombatAt || 0);
 
-    if (
+    if (this.player.defeated) {
+      const defeatRegen =
+        this.player.recovery * DEFEAT_REGEN_MULTIPLIER +
+        DEFEAT_REGEN_BONUS;
+
+      this.player.hp = Math.min(
+        this.player.maxHp,
+        this.player.hp + defeatRegen * dt
+      );
+
+      if (this.player.hp >= this.player.maxHp) {
+        this.player.hp = this.player.maxHp;
+        this.player.defeated = false;
+        this.state.message = "Du bist vollständig genesen und kannst wieder handeln.";
+        this.render();
+      }
+    } else if (
       this.state.lastCombatAt > 0 &&
       outOfCombatFor > PLAYER_REGEN_DELAY &&
       this.player.hp < this.player.maxHp
@@ -273,7 +292,7 @@ export class Game {
       );
     }
 
-    if (this.state.meditation.active) {
+    if (this.state.meditation.active && !this.player.defeated) {
       const rate =
         0.35 +
         this.player.recovery * 0.25 +
@@ -381,18 +400,27 @@ export class Game {
           </div>
         </div>
 
-        <button type="button" class="meditation-btn ${this.state.meditation.active ? "active" : ""}" id="meditationBtn">
-          ${this.state.meditation.active ? "MEDITATION BEENDEN" : "MEDITIEREN"}
+        <button type="button"
+          class="meditation-btn ${this.state.meditation.active ? "active" : ""}"
+          id="meditationBtn"
+          ${this.player.defeated ? "disabled" : ""}>
+          ${this.player.defeated
+            ? "MEDITATION GESPERRT"
+            : this.state.meditation.active
+              ? "MEDITATION BEENDEN"
+              : "MEDITIEREN"}
         </button>
 
         <div class="meditation-status">
-          ${this.state.meditation.active
-            ? `Passive XP: ${(
-                0.35 +
-                this.player.recovery * 0.25 +
-                this.state.floor * 0.04
-              ).toFixed(2)}/Sek.`
-            : "Während der Meditation werden passiv Erfahrungspunkte gesammelt."}
+          ${this.player.defeated
+            ? "Nach einer Niederlage ist Meditation gesperrt, bis deine HP wieder vollständig gefüllt sind."
+            : this.state.meditation.active
+              ? `Passive XP: ${(
+                  0.35 +
+                  this.player.recovery * 0.25 +
+                  this.state.floor * 0.04
+                ).toFixed(2)}/Sek. · HP und AP regenerieren weiter.`
+              : "Während der Meditation werden passiv Erfahrungspunkte gesammelt. HP und AP regenerieren weiter."}
         </div>
 
         <div class="minimap-box">
@@ -427,9 +455,14 @@ export class Game {
         if (room.id === this.currentRoom.id) classes.push("current");
 
         cells.push(`
-          <div class="${classes.join(" ")}">
+          <button
+            type="button"
+            class="${classes.join(" ")}"
+            data-map-room="${room.id}"
+            title="Raum ${room.id + 1}"
+            ${room.id === this.currentRoom.id ? "disabled" : ""}>
             ${room.id === this.currentRoom.id ? "●" : room.completed ? "✓" : ""}
-          </div>
+          </button>
         `);
       }
     }
@@ -444,12 +477,21 @@ export class Game {
   renderCenter() {
     return `
       <section class="center-panel box">
-        <div class="notice">${this.escape(this.state.message)}</div>
+        <div class="notice ${this.player.defeated ? "defeat-notice" : ""}">
+          ${this.escape(this.state.message)}
+        </div>
+        ${this.player.defeated ? `
+          <div class="defeat-panel">
+            <strong>BESIEGT</strong>
+            <span>Keine Aktionen möglich, bis deine HP vollständig regeneriert sind.</span>
+            <span>Regeneration: ${this.player.recovery * DEFEAT_REGEN_MULTIPLIER + DEFEAT_REGEN_BONUS} HP/Sek.</span>
+          </div>
+        ` : ""}
 
         <div class="board-wrap">
           <div class="dungeon-board">
             ${this.currentTiles.map(tile => this.renderTile(tile)).join("")}
-            ${this.renderDoors()}
+            ${this.renderExitTile()}
           </div>
         </div>
 
@@ -458,45 +500,28 @@ export class Game {
           <span><i style="background:#d78a3c"></i>Gegner</span>
           <span><i style="background:#4e8ec9"></i>Objekt</span>
           <span><i style="background:#76a85f"></i>Heiligtum</span>
-          <span><i style="background:#7652a7"></i>Tür</span>
+          <span><i style="background:#5c4c1c"></i>Aktueller Raum</span>
+          <span><i style="background:#294b35"></i>Abgeschlossener Raum</span>
           <span><i style="background:#a77e39"></i>Treppe</span>
         </div>
       </section>
     `;
   }
 
-  renderDoors() {
-    const doors = [];
+  renderExitTile() {
+    if (!this.state.dungeon.exitUnlocked) return "";
 
-    for (const [direction, roomId] of Object.entries(this.currentRoom.neighbors)) {
-      const target = this.state.dungeon.rooms.find(room => room.id === roomId);
-      const config = {
-        up: ["TÜR OBEN", "⬆️"],
-        down: ["TÜR UNTEN", "⬇️"],
-        left: ["TÜR LINKS", "⬅️"],
-        right: ["TÜR RECHTS", "➡️"]
-      }[direction];
-
-      doors.push(`
-        <button type="button" class="tile door door-${direction}" data-door="${roomId}">
-          <span class="tile-title">${config[0]}</span>
-          <span class="tile-sub">Raum ${target.id + 1}</span>
-          <span class="tile-icon">${config[1]}</span>
-        </button>
-      `);
-    }
-
-    if (this.state.dungeon.exitUnlocked) {
-      doors.push(`
-        <button type="button" class="tile stairs" id="stairsBtn">
-          <span class="tile-title">TREPPENABGANG</span>
-          <span class="tile-sub">Zur nächsten Etage</span>
-          <span class="tile-icon">🪜</span>
-        </button>
-      `);
-    }
-
-    return doors.join("");
+    return `
+      <button
+        type="button"
+        class="tile stairs"
+        id="stairsBtn"
+        ${this.player.defeated ? "disabled" : ""}>
+        <span class="tile-title">TREPPENABGANG</span>
+        <span class="tile-sub">Zur nächsten Etage</span>
+        <span class="tile-icon">🪜</span>
+      </button>
+    `;
   }
 
   renderRightPanel() {
@@ -544,10 +569,10 @@ export class Game {
         </div>
 
         <div class="bottom-actions">
-          <button type="button" class="action-btn primary" id="equipBtn" ${!selected || !selected.slot ? "disabled" : ""}>
+          <button type="button" class="action-btn primary" id="equipBtn" ${this.player.defeated || !selected || !selected.slot ? "disabled" : ""}>
             AUSRÜSTEN
           </button>
-          <button type="button" class="action-btn sell" id="sellBtn" ${!selected ? "disabled" : ""}>
+          <button type="button" class="action-btn sell" id="sellBtn" ${this.player.defeated || !selected ? "disabled" : ""}>
             VERKAUFEN
           </button>
         </div>
@@ -569,7 +594,7 @@ export class Game {
 
     if (tile.type === "explore" && !tile.discovered) {
       return `
-        <button type="button" class="tile explore" data-tile="${tile.id}">
+        <button type="button" class="tile explore" data-tile="${tile.id}" ${this.player.defeated ? "disabled" : ""}>
           <div class="progress-layer" style="transform:scaleX(${tile.progress / 100})"></div>
           <div class="tile-content">
             <span class="tile-title">${Math.floor(tile.progress)}%</span>
@@ -586,7 +611,7 @@ export class Game {
       const percentage = Math.max(0, enemy.hp / enemy.maxHp);
 
       return `
-        <button type="button" class="tile ${tile.type}" data-tile="${tile.id}">
+        <button type="button" class="tile ${tile.type}" data-tile="${tile.id}" ${this.player.defeated ? "disabled" : ""}>
           <div class="health-layer ${tile.type === "boss" ? "boss-fill" : "enemy-fill"}" style="transform:scaleX(${percentage})"></div>
           <div class="tile-content">
             <span class="tile-title">${this.escape(enemy.name)}</span>
@@ -603,7 +628,7 @@ export class Game {
       const percentage = Math.max(0, object.hp / object.maxHp);
 
       return `
-        <button type="button" class="tile object" data-tile="${tile.id}">
+        <button type="button" class="tile object" data-tile="${tile.id}" ${this.player.defeated ? "disabled" : ""}>
           <div class="health-layer enemy-fill" style="transform:scaleX(${percentage})"></div>
           <div class="tile-content">
             <span class="tile-title">${Math.ceil(object.hp)}/${object.maxHp}</span>
@@ -623,7 +648,7 @@ export class Game {
     }[tile.type] || ["LEER", "", ""];
 
     return `
-      <button type="button" class="tile ${tile.type}" data-tile="${tile.id}">
+      <button type="button" class="tile ${tile.type}" data-tile="${tile.id}" ${this.player.defeated ? "disabled" : ""}>
         <span class="tile-title">${info[0]}</span>
         <span class="tile-sub">${info[1]}</span>
         <span class="tile-icon">${info[2]}</span>
@@ -640,10 +665,10 @@ export class Game {
       });
     });
 
-    document.querySelectorAll("[data-door]").forEach(button => {
+    document.querySelectorAll("[data-map-room]").forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
-        this.moveToRoom(Number(button.dataset.door));
+        this.moveToRoom(Number(button.dataset.mapRoom));
       });
     });
 
@@ -687,6 +712,8 @@ export class Game {
   }
 
   actOnTile(id) {
+    if (!this.canAct()) return;
+
     const tile = this.currentTiles.find(item => item.id === id);
     if (!tile || tile.completed) return;
 
@@ -700,7 +727,7 @@ export class Game {
     if (tile.type === "object") return this.attackObject(tile);
 
     if (tile.type === "shrine") {
-      if (!this.spendAp(5)) return;
+      if (!this.spendAp(4)) return;
       this.audio.play("shrine");
       const heal = Math.min(25, this.player.maxHp - this.player.hp);
       this.player.hp += heal;
@@ -709,7 +736,7 @@ export class Game {
     }
 
     if (tile.type === "treasure") {
-      if (!this.spendAp(3)) return;
+      if (!this.spendAp(4)) return;
       this.audio.play("treasure");
 
       if (Math.random() < 0.5) {
@@ -726,16 +753,22 @@ export class Game {
     }
 
     if (tile.type === "trap") {
-      if (!this.spendAp(2)) return;
+      if (!this.spendAp(4)) return;
       this.audio.play("trap");
       const damage = 8 + this.state.floor * 2;
-      this.player.hp = Math.max(1, this.player.hp - damage);
+      this.player.hp -= damage;
+
+      if (this.player.hp <= 0) {
+        this.handleDefeat();
+        return;
+      }
+
       this.finishTile(tile, `Falle ausgelöst: ${damage} Schaden.`);
       return;
     }
 
     if (tile.type === "empty") {
-      if (!this.spendAp(2)) return;
+      if (!this.spendAp(4)) return;
       this.finishTile(tile, "Leeres Feld abgeschlossen.");
     }
   }
@@ -780,6 +813,9 @@ export class Game {
     const enemy = tile.enemy;
     if (!enemy || enemy.hp <= 0) return;
 
+    const ACTION_AP_COST = 4;
+    if (!this.spendAp(ACTION_AP_COST)) return;
+
     this.audio.play("attack");
     this.state.lastCombatAt = performance.now();
 
@@ -793,7 +829,12 @@ export class Game {
 
     if (retaliation > 0) {
       this.audio.play("playerHit");
-      this.player.hp = Math.max(1, this.player.hp - retaliation);
+      this.player.hp -= retaliation;
+
+      if (this.player.hp <= 0) {
+        this.handleDefeat();
+        return;
+      }
     }
 
     this.state.message =
@@ -813,7 +854,7 @@ export class Game {
 
   attackObject(tile) {
     if (!tile.object || tile.object.hp <= 0) return;
-    if (!this.spendAp(3)) return;
+    if (!this.spendAp(4)) return;
 
     const damage = Math.max(1, this.attack);
     this.audio.play(tile.object.name === "Vase" ? "vase" : "crate");
@@ -840,21 +881,32 @@ export class Game {
   finishTile(tile, message) {
     if (tile.completed) return;
 
+    const roomId = this.currentRoom.id;
+
     tile.completed = true;
     tile.used = true;
     this.state.message = message;
     this.playTileEffect(tile);
 
+    // Der Abschluss wird an den konkreten Raum gebunden. Dadurch bleibt
+    // der Check korrekt, selbst wenn der Spieler während der Animation
+    // bereits durch eine Tür in einen anderen Raum wechselt.
     window.setTimeout(() => {
-      this.checkRoomCompletion();
+      this.checkRoomCompletion(roomId);
     }, 720);
 
     this.render();
   }
 
-  checkRoomCompletion() {
-    const room = this.currentRoom;
-    const complete = room.tiles.length > 0 &&
+  checkRoomCompletion(roomId = this.currentRoom.id) {
+    const room = this.state.dungeon.rooms.find(
+      dungeonRoom => dungeonRoom.id === roomId
+    );
+
+    if (!room) return;
+
+    const complete =
+      room.tiles.length > 0 &&
       room.tiles.every(tile => tile.completed);
 
     if (!complete) {
@@ -863,27 +915,51 @@ export class Game {
     }
 
     room.completed = true;
-    this.state.message = `Raum ${room.id + 1} abgeschlossen.`;
+
+    if (this.currentRoom.id === room.id) {
+      this.state.message = `Raum ${room.id + 1} abgeschlossen.`;
+    }
 
     if (this.state.dungeon.rooms.every(item => item.completed)) {
       this.state.dungeon.exitUnlocked = true;
-      this.state.message = "Alle Räume abgeschlossen. Die Treppe ist freigeschaltet.";
+      this.state.message =
+        "Alle Räume abgeschlossen. Die Treppe ist freigeschaltet.";
     }
 
     this.render();
   }
 
   moveToRoom(roomId) {
+    if (!this.canAct()) return;
+
     const target = this.state.dungeon.rooms.find(room => room.id === roomId);
     if (!target) return;
 
     target.visited = true;
     this.state.currentRoomId = roomId;
-    this.state.message = `Raum ${target.id + 1} betreten.`;
+
+    const alreadyComplete =
+      target.tiles.length > 0 &&
+      target.tiles.every(tile => tile.completed);
+
+    if (alreadyComplete) {
+      target.completed = true;
+      this.state.message = `Raum ${target.id + 1} ist bereits abgeschlossen.`;
+
+      if (this.state.dungeon.rooms.every(item => item.completed)) {
+        this.state.dungeon.exitUnlocked = true;
+        this.state.message =
+          "Alle Räume abgeschlossen. Die Treppe ist freigeschaltet.";
+      }
+    } else {
+      this.state.message = `Raum ${target.id + 1} betreten.`;
+    }
+
     this.render();
   }
 
   descendFloor() {
+    if (!this.canAct()) return;
     if (!this.state.dungeon.exitUnlocked) return;
 
     const nextFloor = this.state.floor + 1;
@@ -906,7 +982,51 @@ export class Game {
     }, 1450);
   }
 
+  canAct() {
+    if (!this.player.defeated) return true;
+
+    this.state.message = "Du bist besiegt und musst warten, bis deine HP vollständig regeneriert sind.";
+    this.audio.play("error");
+    this.render();
+    return false;
+  }
+
+  handleDefeat() {
+    this.player.hp = 0;
+    this.player.defeated = true;
+    this.state.meditation.active = false;
+    this.state.meditation.xpBuffer = 0;
+    this.state.lastCombatAt = performance.now();
+
+    this.healAllLivingEnemies();
+
+    this.audio.play("playerHit");
+    this.state.message =
+      "Du wurdest besiegt. Alle lebenden Gegner wurden vollständig geheilt. " +
+      "Deine Regeneration ist vorübergehend stark erhöht.";
+
+    this.render();
+  }
+
+  healAllLivingEnemies() {
+    for (const room of this.state.dungeon.rooms) {
+      for (const tile of room.tiles) {
+        if (
+          tile.enemy &&
+          !tile.completed &&
+          tile.enemy.hp > 0 &&
+          tile.enemy.hp < tile.enemy.maxHp
+        ) {
+          tile.enemy.hp = tile.enemy.maxHp;
+          tile.lastHitAt = 0;
+        }
+      }
+    }
+  }
+
   spendAp(cost) {
+    if (!this.canAct()) return false;
+
     if (this.player.ap < cost) {
       this.audio.play("error");
       this.state.message = "Nicht genug Ausdauer.";
@@ -956,6 +1076,13 @@ export class Game {
   }
 
   toggleMeditation() {
+    if (this.player.defeated) {
+      this.state.message = "Meditation ist gesperrt, bis du vollständig geheilt bist.";
+      this.audio.play("error");
+      this.render();
+      return;
+    }
+
     this.state.meditation.active = !this.state.meditation.active;
 
     if (this.state.meditation.active) {
@@ -970,6 +1097,7 @@ export class Game {
   }
 
   spendTalentPoint(stat) {
+    if (!this.canAct()) return;
     if (this.player.talentPoints <= 0) return;
 
     if (stat === "hp") {
@@ -1015,6 +1143,8 @@ export class Game {
   }
 
   equipSelected() {
+    if (!this.canAct()) return;
+
     const item = this.player.inventory[this.selectedItem];
     if (!item?.slot) return;
 
@@ -1031,6 +1161,8 @@ export class Game {
   }
 
   sellSelected() {
+    if (!this.canAct()) return;
+
     const item = this.player.inventory[this.selectedItem];
     if (!item) return;
 
@@ -1137,7 +1269,7 @@ export class Game {
               </div>
             </div>
           </div>
-          <button type="button" class="stat-plus" data-stat="${statKey}" ${!statKey || this.player.talentPoints <= 0 ? "disabled" : ""}>
+          <button type="button" class="stat-plus" data-stat="${statKey}" ${this.player.defeated || !statKey || this.player.talentPoints <= 0 ? "disabled" : ""}>
             +
           </button>
         </div>
@@ -1181,7 +1313,7 @@ export class Game {
 
   reset() {
     const keys = [
-      "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
+      "dungeonlite.v102", "dungeonlite.v105", "dungeonlite.v104", "dungeonlite.v103", "dungeonlite.v102", "dungeonlite.v101", "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
       "dungeonlite.v07", "dungeonlite.v06", "dungeonlite.v054",
       "dungeonlite.v053", "dungeonlite.v052", "dungeonlite.v05"
     ];
