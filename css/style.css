@@ -531,3 +531,20 @@ button { font: inherit; }
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Klicks müssen immer beim eigentlichen Dungeonfeld ankommen. */
+.health-layer,
+.progress-layer,
+.tile-content,
+.tile-title,
+.tile-sub,
+.tile-icon {
+  pointer-events: none;
+}
+
+.tile {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}

@@ -1,4 +1,4 @@
-# DungeonLite v0.5
+# DungeonLite v0.5.1
 
 ## Neu
 
@@ -18,3 +18,15 @@
 
 - Branch: main
 - Ordner: / (root)
+
+
+## Korrekturen in v0.5.1
+
+- Robuste Klick- und Touchsteuerung über Event-Delegation
+- Grafische Ebenen blockieren keine Mausklicks mehr
+- Leeres Inventar beim Spielstart
+- Keine Startausrüstung
+- 0 Gold
+- 0 Diamanten
+- 0 silberne Schlüssel
+- 0 goldene Schlüssel

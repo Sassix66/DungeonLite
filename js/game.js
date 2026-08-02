@@ -23,10 +23,10 @@ export class Game {
   createState() {
     return {
       stage: 1,
-      gems: 12,
-      gold: 66,
-      silverKeys: 2,
-      goldKeys: 1,
+      gems: 0,
+      gold: 0,
+      silverKeys: 0,
+      goldKeys: 0,
       message: "Wähle frei ein verfügbares Feld.",
       player: {
         level: 1,
@@ -40,18 +40,12 @@ export class Game {
         baseDefense: 5,
         recovery: 8,
         equipment: {
-          weapon: structuredClone(ITEMS[0]),
+          weapon: null,
           helmet: null,
           armor: null,
           ring: null
         },
-        inventory: [
-          structuredClone(ITEMS[3]),
-          structuredClone(ITEMS[1]),
-          structuredClone(ITEMS[4]),
-          structuredClone(ITEMS[4]),
-          structuredClone(ITEMS[5])
-        ]
+        inventory: []
       },
       dungeon: this.createDungeon()
     };
@@ -181,8 +175,8 @@ export class Game {
         </div>
 
         <div class="top-actions box">
-          <button class="icon-btn" id="saveBtn">💾</button>
-          <button class="icon-btn danger" id="resetBtn">⏻</button>
+          <button type="button" class="icon-btn" id="saveBtn">💾</button>
+          <button type="button" class="icon-btn danger" id="resetBtn">⏻</button>
         </div>
       </header>
     `;
@@ -245,8 +239,8 @@ export class Game {
         </div>
 
         <div class="tabs">
-          <button class="tab ${this.activeTab === "equipment" ? "active" : ""}" data-tab="equipment">AUSRÜSTUNG</button>
-          <button class="tab ${this.activeTab === "inventory" ? "active" : ""}" data-tab="inventory">ITEMS</button>
+          <button type="button" class="tab ${this.activeTab === "equipment" ? "active" : ""}" data-tab="equipment">AUSRÜSTUNG</button>
+          <button type="button" class="tab ${this.activeTab === "inventory" ? "active" : ""}" data-tab="inventory">ITEMS</button>
         </div>
 
         <div class="inventory-pane">
@@ -263,7 +257,7 @@ export class Game {
 
             <div class="item-grid">
               ${this.player.inventory.map((item, index) => `
-                <button class="item-cell ${index === this.selectedItem ? "selected" : ""}" data-item="${index}">
+                <button type="button" class="item-cell ${index === this.selectedItem ? "selected" : ""}" data-item="${index}">
                   <span class="big">${item.icon}</span>
                   <span>${this.escape(item.name)}</span>
                 </button>
@@ -273,8 +267,8 @@ export class Game {
         </div>
 
         <div class="bottom-actions">
-          <button class="action-btn primary" id="equipBtn" ${!selected || !selected.slot ? "disabled" : ""}>AUSRÜSTEN</button>
-          <button class="action-btn sell" id="sellBtn" ${!selected ? "disabled" : ""}>VERKAUFEN</button>
+          <button type="button" class="action-btn primary" id="equipBtn" ${!selected || !selected.slot ? "disabled" : ""}>AUSRÜSTEN</button>
+          <button type="button" class="action-btn sell" id="sellBtn" ${!selected ? "disabled" : ""}>VERKAUFEN</button>
         </div>
       </aside>
     `;
@@ -283,7 +277,7 @@ export class Game {
   renderTile(room) {
     if (room.type === "explore" && !room.discovered) {
       return `
-        <button class="tile explore" data-room="${room.id}">
+        <button type="button" class="tile explore" data-room="${room.id}">
           <div class="progress-layer" style="transform:scaleX(${room.progress / 100})"></div>
           <div class="tile-content">
             <span class="tile-title">${Math.floor(room.progress)}%</span>
@@ -298,7 +292,7 @@ export class Game {
       const enemy = room.enemy;
       const pct = Math.max(0, enemy.hp / enemy.maxHp);
       return `
-        <button class="tile ${room.type}" data-room="${room.id}" ${enemy.hp <= 0 ? "disabled" : ""}>
+        <button type="button" class="tile ${room.type}" data-room="${room.id}" ${enemy.hp <= 0 ? "disabled" : ""}>
           <div class="health-layer ${room.type === "boss" ? "boss-fill" : "enemy-fill"}" style="transform:scaleX(${pct})"></div>
           <div class="tile-content">
             <span class="tile-title">${Math.ceil(enemy.hp)}/${enemy.maxHp}</span>
@@ -313,7 +307,7 @@ export class Game {
       const object = room.object;
       const pct = Math.max(0, object.hp / object.maxHp);
       return `
-        <button class="tile object" data-room="${room.id}" ${room.destroyed ? "disabled" : ""}>
+        <button type="button" class="tile object" data-room="${room.id}" ${room.destroyed ? "disabled" : ""}>
           <div class="health-layer enemy-fill" style="transform:scaleX(${pct})"></div>
           <div class="tile-content">
             <span class="tile-title">${room.destroyed ? "ZERSTÖRT" : `${Math.ceil(object.hp)}/${object.maxHp}`}</span>
@@ -330,7 +324,7 @@ export class Game {
     }[room.type] || ["LEER", "", ""];
 
     return `
-      <button class="tile ${room.type}" data-room="${room.id}">
+      <button type="button" class="tile ${room.type}" data-room="${room.id}">
         <div class="tile-content">
           <span class="tile-title">${info[0]}</span>
           <span class="tile-sub">${info[1]}</span>
@@ -341,28 +335,51 @@ export class Game {
   }
 
   bind() {
-    document.querySelectorAll("[data-room]").forEach(btn => {
-      btn.addEventListener("click", () => this.actOnRoom(Number(btn.dataset.room)));
+    const board = document.querySelector(".dungeon-board");
+
+    board?.addEventListener("click", event => {
+      const button = event.target.closest("[data-room]");
+      if (!button || button.disabled) return;
+
+      event.preventDefault();
+      this.actOnRoom(Number(button.dataset.room));
     });
 
     document.querySelectorAll("[data-item]").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", event => {
+        event.preventDefault();
         this.selectedItem = Number(btn.dataset.item);
         this.render();
       });
     });
 
     document.querySelectorAll("[data-tab]").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", event => {
+        event.preventDefault();
         this.activeTab = btn.dataset.tab;
         this.render();
       });
     });
 
-    document.getElementById("equipBtn")?.addEventListener("click", () => this.equipSelected());
-    document.getElementById("sellBtn")?.addEventListener("click", () => this.sellSelected());
-    document.getElementById("saveBtn")?.addEventListener("click", () => this.save());
-    document.getElementById("resetBtn")?.addEventListener("click", () => this.reset());
+    document.getElementById("equipBtn")?.addEventListener("click", event => {
+      event.preventDefault();
+      this.equipSelected();
+    });
+
+    document.getElementById("sellBtn")?.addEventListener("click", event => {
+      event.preventDefault();
+      this.sellSelected();
+    });
+
+    document.getElementById("saveBtn")?.addEventListener("click", event => {
+      event.preventDefault();
+      this.save();
+    });
+
+    document.getElementById("resetBtn")?.addEventListener("click", event => {
+      event.preventDefault();
+      this.reset();
+    });
   }
 
   actOnRoom(id) {
@@ -581,7 +598,7 @@ export class Game {
               </div>
             </div>
           </div>
-          <button class="stat-plus">+</button>
+          <button type="button" class="stat-plus">+</button>
         </div>
       </div>
     `;
