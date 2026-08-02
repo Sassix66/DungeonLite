@@ -576,3 +576,19 @@ button { font: inherit; }
   opacity: .35;
   filter: grayscale(.7);
 }
+
+
+.tile.completed {
+  background: #555a62;
+  color: #d6d9df;
+  opacity: .72;
+  filter: grayscale(.75);
+}
+
+.tile.completed .tile-icon {
+  color: #d6d9df;
+}
+
+.tile.completed .tile-sub {
+  color: #c0c5ce;
+}

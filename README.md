@@ -1,4 +1,4 @@
-# DungeonLite v0.5.3
+# DungeonLite v0.5.4
 
 ## Neu
 
@@ -57,3 +57,13 @@
 - Nach Abschluss verschwindet ein Feld vollständig.
 - Für jedes entfernte Feld wird ein neues zufälliges Feld sichtbar.
 - Dadurch bleibt der Dungeon übersichtlich und nie komplett gefüllt.
+
+
+## Änderungen in v0.5.4
+
+- Jeder Dungeon besitzt eine feste kleine Gruppe von drei oder vier Kacheln.
+- Abgeschlossene Kacheln bleiben sichtbar und werden grau.
+- Neue Kacheln erscheinen nicht während einer laufenden Etappe.
+- Erst wenn alle vorhandenen Kacheln erledigt sind, startet automatisch die nächste Etappe.
+- Die nächste Etappe erzeugt einen komplett neuen Dungeon.
+- Der Spieler regeneriert langsam HP, wenn mindestens fünf Sekunden lang kein Kampf stattgefunden hat.

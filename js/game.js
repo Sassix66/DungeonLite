@@ -1,9 +1,11 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 
-const SAVE_KEY = "dungeonlite.v053";
+const SAVE_KEY = "dungeonlite.v054";
 const AP_REGEN_PER_SECOND = 1;
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
+const PLAYER_REGEN_DELAY = 5000;
+const PLAYER_REGEN_PER_SECOND = 1.5;
 
 export class Game {
   constructor(root) {
@@ -27,7 +29,8 @@ export class Game {
       gold: 0,
       silverKeys: 0,
       goldKeys: 0,
-      message: "Alle sichtbaren Felder können frei ausgewählt werden.",
+      message: "Schließe alle Kacheln ab, um die nächste Etappe zu erreichen.",
+      lastCombatAt: 0,
       player: {
         level: 1,
         xp: 0,
@@ -53,27 +56,46 @@ export class Game {
 
   createDungeon() {
     const pool = [
-      "explore", "explore", "explore", "explore",
-      "enemy", "enemy", "enemy",
+      "explore", "explore", "explore",
+      "enemy", "enemy",
       "object", "object",
       "shrine",
       "shop",
       "boss"
     ];
 
-    const rooms = Array.from({ length: 25 }, (_, id) => {
-      const type = pool[Math.floor(Math.random() * pool.length)];
-      const room = {
-        id,
-        type,
-        visible: false,
-        discovered: type !== "explore",
-        progress: type === "explore" ? 0 : 100,
-        destroyed: false,
-        used: false,
-        removed: false,
-        lastHitAt: 0
-      };
+    const visibleCount = 3 + Math.floor(Math.random() * 2);
+    const chosenTypes = Array.from({ length: visibleCount }, () => {
+      return pool[Math.floor(Math.random() * pool.length)];
+    });
+
+    // Ab Etappe 2 ist immer mindestens ein Gegner dabei.
+    if (this.state?.stage > 1 && !chosenTypes.some(type => type === "enemy" || type === "boss")) {
+      chosenTypes[0] = "enemy";
+    }
+
+    const slots = [...Array(25).keys()].sort(() => Math.random() - 0.5).slice(0, visibleCount);
+
+    const rooms = Array.from({ length: 25 }, (_, id) => ({
+      id,
+      type: "empty",
+      visible: false,
+      discovered: true,
+      progress: 100,
+      destroyed: false,
+      used: false,
+      completed: false,
+      lastHitAt: 0
+    }));
+
+    slots.forEach((slotId, index) => {
+      const type = chosenTypes[index];
+      const room = rooms[slotId];
+
+      room.type = type;
+      room.visible = true;
+      room.discovered = type !== "explore";
+      room.progress = type === "explore" ? 0 : 100;
 
       if (type === "enemy") {
         room.enemy = this.makeEnemy(false);
@@ -92,16 +114,6 @@ export class Game {
           maxHp: 18
         };
       }
-
-      return room;
-    });
-
-    // Zu Beginn sind nur drei oder vier zufällige Felder sichtbar.
-    const initialCount = 3 + Math.floor(Math.random() * 2);
-    const shuffled = [...rooms].sort(() => Math.random() - 0.5);
-
-    shuffled.slice(0, initialCount).forEach(room => {
-      room.visible = true;
     });
 
     return { rooms };
@@ -134,6 +146,18 @@ export class Game {
     this.lastTick = now;
 
     this.player.ap = Math.min(this.player.maxAp, this.player.ap + AP_REGEN_PER_SECOND * dt);
+
+    const outOfCombatFor = now - (this.state.lastCombatAt || 0);
+    if (
+      this.state.lastCombatAt > 0 &&
+      outOfCombatFor > PLAYER_REGEN_DELAY &&
+      this.player.hp < this.player.maxHp
+    ) {
+      this.player.hp = Math.min(
+        this.player.maxHp,
+        this.player.hp + PLAYER_REGEN_PER_SECOND * dt
+      );
+    }
 
     let dirty = false;
 
@@ -288,8 +312,20 @@ export class Game {
   }
 
   renderTile(room) {
-    if (!room.visible || room.removed) {
+    if (!room.visible) {
       return `<div class="tile-spacer" aria-hidden="true"></div>`;
+    }
+
+    if (room.completed) {
+      return `
+        <button type="button" class="tile completed" disabled>
+          <div class="tile-content">
+            <span class="tile-title">ERLEDIGT</span>
+            <span class="tile-sub">${this.escape(this.completedLabel(room))}</span>
+            <span class="tile-icon">✓</span>
+          </div>
+        </button>
+      `;
     }
 
     if (room.type === "explore" && !room.discovered) {
@@ -341,7 +377,7 @@ export class Game {
     }[room.type] || ["LEER", "", ""];
 
     return `
-      <button type="button" class="tile ${room.type}" data-room="${room.id}" ${room.type === "shrine" && room.used ? "disabled" : ""}>
+      <button type="button" class="tile ${room.type}" data-room="${room.id}" ${room.completed ? "disabled" : ""}>
         <div class="tile-content">
           <span class="tile-title">${info[0]}</span>
           <span class="tile-sub">${info[1]}</span>
@@ -401,7 +437,7 @@ export class Game {
 
   actOnRoom(id) {
     const room = this.state.dungeon.rooms[id];
-    if (!room || !room.visible || room.removed) return;
+    if (!room || !room.visible || room.completed) return;
 
     // Jede aktuell sichtbare Kachel ist jederzeit direkt auswählbar.
 
@@ -474,6 +510,7 @@ export class Game {
     if (!this.spendAp(room.type === "boss" ? 7 : 5)) return;
 
     const enemy = room.enemy;
+    this.state.lastCombatAt = performance.now();
     const damage = this.damage(this.attack, enemy.defense);
     enemy.hp = Math.max(0, enemy.hp - damage);
     room.lastHitAt = performance.now();
@@ -522,19 +559,23 @@ export class Game {
   }
 
   finishRoom(room, message) {
-    room.removed = true;
-    room.visible = false;
+    room.completed = true;
+    room.used = true;
     this.state.message = message;
-    this.revealReplacement();
-    this.render();
+    this.checkDungeonCompletion();
   }
 
-  revealReplacement() {
-    const hidden = this.state.dungeon.rooms.filter(room => !room.visible && !room.removed);
-    if (hidden.length === 0) return;
+  checkDungeonCompletion() {
+    const activeRooms = this.state.dungeon.rooms.filter(room => room.visible);
+    const allCompleted = activeRooms.length > 0 && activeRooms.every(room => room.completed);
 
-    const target = hidden[Math.floor(Math.random() * hidden.length)];
-    target.visible = true;
+    if (allCompleted) {
+      this.state.stage += 1;
+      this.state.dungeon = this.createDungeon();
+      this.state.message = `Etappe ${this.state.stage} beginnt.`;
+    }
+
+    this.render();
   }
 
   spendAp(cost) {
@@ -565,7 +606,7 @@ export class Game {
 
   updateEnemyTiles() {
     for (const room of this.state.dungeon.rooms) {
-      if (!room.enemy || !room.visible || room.removed) continue;
+      if (!room.enemy || !room.visible || room.completed) continue;
 
       const button = document.querySelector(`[data-room="${room.id}"]`);
       if (!button) continue;
@@ -659,6 +700,20 @@ export class Game {
     `;
   }
 
+  completedLabel(room) {
+    const labels = {
+      explore: "Erkundung",
+      enemy: "Gegner",
+      boss: "Boss",
+      object: "Objekt",
+      shrine: "Heiligtum",
+      shop: "Laden",
+      empty: "Leeres Feld"
+    };
+
+    return labels[room.type] || "Feld";
+  }
+
   damage(attack, defense) {
     return Math.max(1, Math.round((attack - defense * .55) * (.85 + Math.random() * .3)));
   }
@@ -680,6 +735,7 @@ export class Game {
 
   reset() {
     localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem("dungeonlite.v053");
     localStorage.removeItem("dungeonlite.v052");
     localStorage.removeItem("dungeonlite.v05");
     localStorage.removeItem("dungeonlite.ui.v04");
