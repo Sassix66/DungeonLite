@@ -1,16 +1,20 @@
-# DungeonLite
+# DungeonLite v0.5
 
-Version 0.4 setzt die Dungeon-Oberfläche als übersichtliches Drei-Spalten-Layout um:
+## Neu
 
-- Links: Level, Werte, Ressourcen und Minimap
-- Mitte: großes anklickbares Dungeon-Raster
-- Rechts: Ausrüstung, Inventar und Itemdetails
-- Oben: Etappe, Währungen und Systembuttons
+- Alle Aktionen finden direkt auf dem Dungeon-Raster statt.
+- Felder können frei ausgewählt werden.
+- Grüne Erkundungsfelder benötigen mehrere Klicks bis 100 %.
+- Jede Aktion verbraucht Ausdauer.
+- Ausdauer regeneriert in Echtzeit.
+- Gegner werden direkt durch Klicks angegriffen.
+- Gegner greifen bei jedem Klick zurück.
+- Gegner regenerieren Leben, wenn längere Zeit nicht angegriffen wird.
+- Gegnerfarbe funktioniert als Lebensanzeige und leert sich von rechts nach links.
+- Vasen und Kisten können direkt zerstört werden.
+- Zerstörbare Objekte können Gold oder Heiltränke enthalten.
 
-## Start
+## GitHub Pages
 
-GitHub Pages:
 - Branch: main
 - Ordner: / (root)
-
-Alle Dateien müssen direkt im Repository-Stamm liegen.
