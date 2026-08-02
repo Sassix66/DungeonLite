@@ -1134,3 +1134,265 @@ button.map-room:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+
+.comparison-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: rgba(19,28,43,.82);
+}
+
+.comparison-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.comparison-main {
+  min-width: 0;
+}
+
+.comparison-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: #8f9db1;
+  font-size: .63rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.comparison-item-name {
+  overflow: hidden;
+  margin: 0;
+  color: #f0f3f8;
+  font-size: .94rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-rarity {
+  display: block;
+  margin-top: 4px;
+  color: #aeb8c9;
+  font-size: .68rem;
+}
+
+.comparison-value {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 7px;
+  color: #f0ca6f;
+  background: rgba(240,202,111,.09);
+  font-size: .7rem;
+  font-weight: 900;
+}
+
+.comparison-legend {
+  display: grid;
+  grid-template-columns: 1fr 42px 50px;
+  gap: 5px;
+  margin: 0 0 4px 78px;
+  color: #718097;
+  font-size: .58rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.comparison-table {
+  display: grid;
+  gap: 5px;
+}
+
+.comparison-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) 34px 16px 34px 48px;
+  gap: 4px;
+  align-items: center;
+  min-height: 33px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.035);
+  font-size: .7rem;
+}
+
+.comparison-stat {
+  color: #d7deea;
+  font-weight: 800;
+}
+
+.comparison-current {
+  color: #98a4b7;
+  text-align: right;
+}
+
+.comparison-arrow {
+  color: #69778c;
+  text-align: center;
+}
+
+.comparison-selected {
+  color: #f0f3f8;
+  font-weight: 900;
+  text-align: right;
+}
+
+.comparison-difference {
+  padding: 3px;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: 950;
+}
+
+.comparison-row.better .comparison-difference {
+  color: #a8efb0;
+  background: rgba(73,170,92,.18);
+}
+
+.comparison-row.worse .comparison-difference {
+  color: #ffadb1;
+  background: rgba(205,70,78,.18);
+}
+
+.comparison-row.equal .comparison-difference {
+  color: #aab4c4;
+  background: rgba(130,142,160,.12);
+}
+
+.equipped-reference {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.equipped-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #8795a9;
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.equipped-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 7px;
+  border-radius: 8px;
+  background: rgba(38,54,81,.78);
+}
+
+.equipped-icon {
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.equipped-copy {
+  min-width: 0;
+}
+
+.equipped-copy strong,
+.equipped-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.equipped-copy strong {
+  color: #e9edf4;
+  font-size: .73rem;
+}
+
+.equipped-copy span {
+  margin-top: 2px;
+  color: #9ca8ba;
+  font-size: .62rem;
+}
+
+.equipped-empty {
+  padding: 8px;
+  border-radius: 8px;
+  color: #8f9bad;
+  background: rgba(255,255,255,.035);
+  font-size: .68rem;
+}
+
+.comparison-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px;
+  border-radius: 7px;
+  font-size: .7rem;
+}
+
+.comparison-total.positive {
+  color: #b3efb9;
+  background: rgba(61,153,78,.14);
+}
+
+.comparison-total.negative {
+  color: #ffb1b5;
+  background: rgba(188,60,68,.14);
+}
+
+.consumable-effect {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(47,84,67,.42);
+}
+
+.consumable-icon {
+  font-size: 1.55rem;
+  text-align: center;
+}
+
+.consumable-effect strong,
+.consumable-effect span {
+  display: block;
+}
+
+.consumable-effect strong {
+  color: #dff7e5;
+  font-size: .78rem;
+}
+
+.consumable-effect span {
+  margin-top: 3px;
+  color: #9ec2aa;
+  font-size: .64rem;
+}
+
+.empty-selection {
+  margin: 0;
+  color: #8f9bad;
+  font-size: .73rem;
+}
+
+@media (max-width: 430px) {
+  .comparison-legend {
+    margin-left: 64px;
+    grid-template-columns: 30px 30px 42px;
+  }
+
+  .comparison-row {
+    grid-template-columns: minmax(58px, 1fr) 28px 12px 28px 42px;
+    gap: 3px;
+    padding-inline: 4px;
+    font-size: .64rem;
+  }
+}

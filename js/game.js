@@ -1,7 +1,7 @@
 import { ITEMS, ENEMIES, BOSSES } from "./data.js";
 import { AudioManager } from "./audio.js";
 
-const SAVE_KEY = "dungeonlite.v12";
+const SAVE_KEY = "dungeonlite.v13";
 const ENEMY_REGEN_DELAY = 1800;
 const ENEMY_REGEN_PER_SECOND = 4;
 const PLAYER_REGEN_DELAY = 5000;
@@ -696,14 +696,11 @@ export class Game {
         <div class="inventory-pane">
           <div class="item-detail">
             <div class="item-info">
-              ${selected ? `
-                <h3>${this.escape(selected.name)}</h3>
-                ${selected.rarityLabel ? `<p>${this.escape(selected.rarityLabel)}</p>` : ""}
-                ${selected.attack ? `<p>ANGRIFF +${selected.attack}</p>` : ""}
-                ${selected.defense ? `<p>VERTEIDIGUNG +${selected.defense}</p>` : ""}
-                ${selected.hp ? `<p>HP +${selected.hp}</p>` : ""}
-                ${selected.heal ? `<p>HEILUNG ${selected.heal}</p>` : ""}
-              ` : `<p>Wähle einen Gegenstand.</p>`}
+              ${selected
+                ? selected.slot
+                  ? this.renderEquipmentComparison(selected)
+                  : this.renderConsumableDetails(selected)
+                : `<p class="empty-selection">Wähle einen Gegenstand.</p>`}
             </div>
 
             <div class="item-grid">
@@ -1383,6 +1380,159 @@ export class Game {
     }
   }
 
+  renderEquipmentComparison(selected) {
+    const equipped = this.player.equipment[selected.slot] || null;
+    const slotLabel = this.equipmentSlotLabel(selected.slot);
+
+    return `
+      <section class="comparison-card">
+        <div class="comparison-heading">
+          <div class="comparison-main">
+            <span class="comparison-kicker">${slotLabel}</span>
+            <h3 class="comparison-item-name rarity-${selected.rarity || "common"}">
+              ${this.escape(selected.name)}
+            </h3>
+            <span class="comparison-rarity">
+              ${this.escape(selected.rarityLabel || "Gewöhnlich")}
+            </span>
+          </div>
+          <span class="comparison-value">${selected.value || 0} G</span>
+        </div>
+
+        <div class="comparison-legend">
+          <span>Ausgerüstet</span>
+          <span>Neu</span>
+          <span>Differenz</span>
+        </div>
+
+        <div class="comparison-table">
+          ${this.renderComparisonRow(
+            "Angriff",
+            selected.attack || 0,
+            equipped?.attack || 0
+          )}
+          ${this.renderComparisonRow(
+            "Verteidigung",
+            selected.defense || 0,
+            equipped?.defense || 0
+          )}
+          ${this.renderComparisonRow(
+            "HP",
+            selected.hp || 0,
+            equipped?.hp || 0
+          )}
+        </div>
+
+        <div class="equipped-reference">
+          <span class="equipped-label">Momentan ausgerüstet</span>
+          ${equipped ? `
+            <div class="equipped-item">
+              <span class="equipped-icon">${equipped.icon || "◈"}</span>
+              <div class="equipped-copy">
+                <strong>${this.escape(equipped.name)}</strong>
+                <span>${this.formatEquipmentSummary(equipped)}</span>
+              </div>
+            </div>
+          ` : `
+            <div class="equipped-empty">
+              Dieser Ausrüstungsplatz ist leer.
+            </div>
+          `}
+        </div>
+
+        <div class="comparison-total ${this.totalEquipmentDifference(selected, equipped) >= 0 ? "positive" : "negative"}">
+          <span>Gesamtdifferenz</span>
+          <strong>${this.signedValue(this.totalEquipmentDifference(selected, equipped))}</strong>
+        </div>
+      </section>
+    `;
+  }
+
+  renderConsumableDetails(item) {
+    return `
+      <section class="comparison-card consumable-card">
+        <div class="comparison-heading">
+          <div class="comparison-main">
+            <span class="comparison-kicker">Verbrauchsgegenstand</span>
+            <h3 class="comparison-item-name">${this.escape(item.name)}</h3>
+          </div>
+          <span class="comparison-value">${item.value || 0} G</span>
+        </div>
+
+        <div class="consumable-effect">
+          <span class="consumable-icon">${item.icon || "◈"}</span>
+          <div>
+            ${item.heal
+              ? `<strong>Heilt ${item.heal} HP</strong>`
+              : `<strong>Spezialgegenstand</strong>`}
+            <span>Über „Benutzen“ aktivieren.</span>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  renderComparisonRow(label, selectedValue, equippedValue) {
+    const difference = selectedValue - equippedValue;
+    const status =
+      difference > 0
+        ? "better"
+        : difference < 0
+          ? "worse"
+          : "equal";
+
+    return `
+      <div class="comparison-row ${status}">
+        <span class="comparison-stat">${label}</span>
+        <span class="comparison-current">${equippedValue}</span>
+        <span class="comparison-arrow">→</span>
+        <span class="comparison-selected">${selectedValue}</span>
+        <span class="comparison-difference">
+          ${difference === 0 ? "±0" : this.signedValue(difference)}
+        </span>
+      </div>
+    `;
+  }
+
+  equipmentSlotLabel(slot) {
+    return {
+      weapon: "Waffe",
+      helmet: "Helm",
+      armor: "Rüstung",
+      ring: "Ring",
+      boots: "Stiefel",
+      accessory: "Schmuck"
+    }[slot] || "Ausrüstung";
+  }
+
+  formatEquipmentSummary(item) {
+    const values = [];
+
+    if (item.attack) values.push(`+${item.attack} ANG`);
+    if (item.defense) values.push(`+${item.defense} ABW`);
+    if (item.hp) values.push(`+${item.hp} HP`);
+
+    return values.length ? values.join(" · ") : "Keine Werteboni";
+  }
+
+  totalEquipmentDifference(selected, equipped) {
+    const selectedTotal =
+      (selected.attack || 0) +
+      (selected.defense || 0) +
+      (selected.hp || 0);
+
+    const equippedTotal =
+      (equipped?.attack || 0) +
+      (equipped?.defense || 0) +
+      (equipped?.hp || 0);
+
+    return selectedTotal - equippedTotal;
+  }
+
+  signedValue(value) {
+    return value > 0 ? `+${value}` : String(value);
+  }
+
   createEquipmentReward() {
     const equipmentPool = ITEMS.filter(item => item.slot);
     const base = structuredClone(
@@ -1619,7 +1769,7 @@ export class Game {
 
   reset() {
     const keys = [
-      "dungeonlite.v102", "dungeonlite.v12", "dungeonlite.v11", "dungeonlite.v107", "dungeonlite.v106", "dungeonlite.v105", "dungeonlite.v104", "dungeonlite.v103", "dungeonlite.v102", "dungeonlite.v101", "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
+      "dungeonlite.v102", "dungeonlite.v13", "dungeonlite.v12", "dungeonlite.v11", "dungeonlite.v107", "dungeonlite.v106", "dungeonlite.v105", "dungeonlite.v104", "dungeonlite.v103", "dungeonlite.v102", "dungeonlite.v101", "dungeonlite.v10", "dungeonlite.v09", "dungeonlite.v08",
       "dungeonlite.v07", "dungeonlite.v06", "dungeonlite.v054",
       "dungeonlite.v053", "dungeonlite.v052", "dungeonlite.v05"
     ];

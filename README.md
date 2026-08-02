@@ -1,4 +1,4 @@
-# DungeonLite v1.2
+# DungeonLite v1.3
 
 ## Neue Etagenkarte
 
@@ -74,3 +74,16 @@ Kein AP verbrauchen:
   - Heiltränke
 - Ausrüstung aus Schatztruhen skaliert mit der aktuellen Etage und kann gewöhnlich, selten oder episch sein.
 - Silberne Schlüssel können von Gegnern, Elitegegnern, Bossen sowie aus Vasen und Kisten stammen.
+
+
+## Ausrüstungsvergleich in v1.3
+
+- Automatischer Vergleich mit dem aktuell ausgerüsteten Gegenstand desselben Slots.
+- Anzeige von Angriff, Verteidigung und HP.
+- Alte Werte, neue Werte und genaue Differenz werden nebeneinander gezeigt.
+- Verbesserungen erscheinen grün.
+- Verschlechterungen erscheinen rot.
+- Gleichbleibende Werte erscheinen neutral.
+- Der momentan ausgerüstete Gegenstand wird mit Name und Kurzfassung angezeigt.
+- Leere Ausrüstungsslots werden eindeutig markiert.
+- Verbrauchsgegenstände besitzen eine separate Detailansicht.
