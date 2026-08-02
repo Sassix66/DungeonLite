@@ -1011,6 +1011,10 @@ export class Game {
     ];
   }
 
+  equipmentSlotLabel(slotId) {
+    return this.equipmentSlots().find(slot => slot.id === slotId)?.label || slotId;
+  }
+
   loop(now) {
     const dt = Math.min(1, (now - this.lastTick) / 1000);
     this.lastTick = now;

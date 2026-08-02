@@ -1,5 +1,20 @@
 # Changelog
 
+## v4.0.5 (Hotfix: fehlende equipmentSlotLabel())
+
+### Behoben
+- `renderEquipmentComparison()` rief `this.equipmentSlotLabel(...)` auf, obwohl
+  diese Methode nirgendwo im Code definiert war. Sobald ein Ausrüstungs-
+  gegenstand ausgewählt wurde, warf `render()` deshalb bei jedem Aufruf einen
+  Fehler, bevor die Seite aktualisiert wurde. Dadurch blieb die alte Seite
+  unverändert stehen (u. a. mit deaktiviertem „Ausrüsten"-Button), und jede
+  weitere Aktion (Angriff, Raumwechsel) ließ `render()` am selben Fehler
+  scheitern — das Spiel wirkte vollständig eingefroren.
+- `equipmentSlotLabel(slotId)` ergänzt, die den Slot-Namen aus den bereits
+  vorhandenen `equipmentSlots()` nachschlägt.
+- Regressionstest ergänzt (`tests/equipment-selection-render.test.mjs`), der
+  gezielt die Auswahl eines Ausrüstungsgegenstands prüft.
+
 ## v4.0.5
 
 ### Technisch

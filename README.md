@@ -465,6 +465,7 @@ node tests/room-completion.test.mjs
 node tests/floor-transition.test.mjs
 node tests/save-load.test.mjs
 node tests/inventory-economy.test.mjs
+node tests/equipment-selection-render.test.mjs
 ```
 
 Browserkonsole und Smartphone-Querformat bleiben weiterhin manuelle
